@@ -29,6 +29,10 @@ impl SidecarManager {
         SidecarClient::new(self.port)
     }
 
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
     pub fn start(&self) -> AppResult<SidecarHealth> {
         if let Ok(health) = self.health() {
             if health.status == "ok" {
@@ -41,6 +45,7 @@ impl SidecarManager {
         let (program, args, working_dir) = resolve_sidecar_launcher(self.port)?;
         let mut command = Command::new(&program);
         command.args(&args);
+        command.env("PATH", augmented_path());
         if let Some(dir) = working_dir {
             command.current_dir(dir);
         }
@@ -104,6 +109,21 @@ impl Drop for SidecarManager {
     fn drop(&mut self) {
         let _ = self.stop();
     }
+}
+
+fn augmented_path() -> String {
+    let existing = std::env::var("PATH").unwrap_or_default();
+    let extras = [
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+        "/opt/homebrew/sbin",
+        "/usr/local/sbin",
+    ];
+    let mut paths: Vec<String> = extras.iter().map(|entry| (*entry).to_string()).collect();
+    if !existing.is_empty() {
+        paths.push(existing);
+    }
+    paths.join(":")
 }
 
 fn resolve_sidecar_launcher(port: u16) -> AppResult<(PathBuf, Vec<String>, Option<PathBuf>)> {

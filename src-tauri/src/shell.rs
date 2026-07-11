@@ -49,13 +49,22 @@ pub fn read_text_file(path: &str, max_bytes: usize) -> AppResult<String> {
     std::fs::read_to_string(path).map_err(|error| AppError::Message(error.to_string()))
 }
 
-pub fn validate_ffmpeg(path: &str) -> AppResult<(bool, String, Option<String>)> {
+fn ffmpeg_candidates(path: &str) -> Vec<PathBuf> {
     let trimmed = path.trim();
-    let candidates = if trimmed.is_empty() || trimmed == "ffmpeg" {
-        vec![PathBuf::from("ffmpeg")]
+    if trimmed.is_empty() || trimmed == "ffmpeg" {
+        vec![
+            PathBuf::from("ffmpeg"),
+            PathBuf::from("/opt/homebrew/bin/ffmpeg"),
+            PathBuf::from("/usr/local/bin/ffmpeg"),
+            PathBuf::from("/usr/bin/ffmpeg"),
+        ]
     } else {
         vec![PathBuf::from(trimmed)]
-    };
+    }
+}
+
+pub fn validate_ffmpeg(path: &str) -> AppResult<(bool, String, Option<String>)> {
+    let candidates = ffmpeg_candidates(path);
 
     for candidate in candidates {
         let output = match Command::new(&candidate).arg("-version").output() {

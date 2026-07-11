@@ -36,7 +36,7 @@ const DOUYIN_TIME_OPTIONS = [
 ];
 
 export function SearchPage() {
-  const [platform, setPlatform] = useState<Platform>("douyin");
+  const [platform, setPlatform] = useState<Platform>("bilibili");
   const [keyword, setKeyword] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [selected, setSelected] = useState<string[]>([]);
@@ -166,7 +166,7 @@ export function SearchPage() {
       <div>
         <h1 className="text-xl font-semibold">关键词搜索</h1>
         <p className="mt-1 text-sm text-slate-500">
-          抖音与 Bilibili 均已接入真实搜索；支持筛选、分页加载、多选批量下载。
+          Bilibili 已接入真实搜索；支持筛选、分页加载、多选批量下载。
         </p>
       </div>
 
@@ -309,18 +309,14 @@ export function SearchPage() {
               <>
                 <span>未找到相关结果</span>
                 <span className="text-xs">
-                  {platform === "douyin"
-                    ? "请确认已在设置中登录抖音，或尝试更换关键词"
-                    : "请尝试更换关键词或调整筛选条件"}
+                  请尝试更换关键词或调整筛选条件
                 </span>
               </>
             ) : (
               <>
                 <span>输入关键词后，点击「搜索」开始</span>
                 <span className="text-xs text-slate-300">
-                  {platform === "douyin"
-                    ? "抖音搜索需要先完成平台登录与验证"
-                    : "支持排序筛选与批量下载"}
+                  支持排序筛选与批量下载
                 </span>
               </>
             )}

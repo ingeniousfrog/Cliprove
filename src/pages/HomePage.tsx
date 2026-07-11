@@ -33,7 +33,12 @@ export function HomePage() {
   const detected = url.trim() ? detectAdapter(url.trim()) : undefined;
 
   const parseMutation = useMutation({
-    mutationFn: () => parseLink(url.trim()),
+    mutationFn: () => {
+      if (!detected) {
+        throw new Error("当前版本暂只支持 Bilibili 链接");
+      }
+      return parseLink(url.trim());
+    },
     onSuccess: (data) => {
       setParsedMedia(data);
       setSelectedAssets(data.assets.map((asset) => asset.id));
@@ -140,7 +145,7 @@ export function HomePage() {
           <Textarea
             value={url}
             onChange={(event) => setUrl(event.target.value)}
-            placeholder="粘贴抖音或 Bilibili 分享链接…"
+            placeholder="粘贴 Bilibili 分享链接…"
           />
           <div className="flex items-center justify-between gap-3">
             <div className="text-xs text-slate-500">
@@ -149,7 +154,7 @@ export function HomePage() {
                   已识别平台：<Badge>{detected.name}</Badge>
                 </span>
               ) : (
-                "等待输入有效链接"
+                "等待输入 Bilibili 链接"
               )}
             </div>
             <div className="flex gap-2">
@@ -164,7 +169,7 @@ export function HomePage() {
               <Button
                 loading={parseMutation.isPending}
                 onClick={() => parseMutation.mutate()}
-                disabled={!url.trim()}
+                disabled={!url.trim() || !detected}
               >
                 {parseMutation.isPending ? "解析中…" : "解析链接"}
               </Button>

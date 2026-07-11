@@ -8,7 +8,7 @@ use crate::app_state::AppState;
 use crate::db::Database;
 use crate::errors::{AppError, AppResult};
 use crate::models::{DownloadOptions, MediaItem, StructuredError};
-use crate::sidecar::{SidecarClient, SidecarManager};
+use crate::sidecar::SidecarManager;
 
 const TASK_TIMEOUT: Duration = Duration::from_secs(600);
 const SUBMIT_TIMEOUT: Duration = Duration::from_secs(30);
@@ -58,24 +58,20 @@ async fn run_sidecar_task(
         .update_progress(&task_id, "parsing", "连接引擎", 0.05, None)?;
     emit_progress(&app, &task_id, "连接引擎", 0.05);
 
-    let settings = db.settings().get_all()?;
-    let client = sidecar.client()?;
-
     db.tasks()
         .update_progress(&task_id, "downloading", "提交下载任务", 0.1, None)?;
     emit_progress(&app, &task_id, "提交下载任务", 0.1);
 
+    let settings = db.settings().get_all()?;
+    let poll_port = sidecar.port();
     let job = submit_download_job(
         Arc::clone(&sidecar),
-        &client,
         &item,
         &options,
         &output_dir,
         &settings,
     )
     .await?;
-
-    let poll_port = client.port();
 
     let mut last_progress = 0.1;
     let mut last_stage = "提交下载任务".to_string();
@@ -172,13 +168,12 @@ async fn run_sidecar_task(
 
 async fn submit_download_job(
     sidecar: Arc<SidecarManager>,
-    client: &SidecarClient,
     item: &MediaItem,
     options: &DownloadOptions,
     output_dir: &str,
     settings: &crate::models::AppSettings,
 ) -> AppResult<crate::sidecar::SidecarJob> {
-    match try_submit_download(client, item, options, output_dir, settings).await {
+    match try_submit_download(Arc::clone(&sidecar), item, options, output_dir, settings).await {
         Ok(job) => Ok(job),
         Err(error) if should_restart_sidecar(&error) => {
             let sidecar_for_restart = Arc::clone(&sidecar);
@@ -196,8 +191,7 @@ async fn submit_download_job(
             })?
             .map_err(|_| AppError::Message("Sidecar 重启异常退出".to_string()))??;
 
-            let client = sidecar.client()?;
-            try_submit_download(&client, item, options, output_dir, settings).await
+            try_submit_download(sidecar, item, options, output_dir, settings).await
         }
         Err(error) => Err(error),
     }
@@ -223,13 +217,12 @@ fn should_restart_sidecar(error: &AppError) -> bool {
 }
 
 async fn try_submit_download(
-    client: &SidecarClient,
+    sidecar: Arc<SidecarManager>,
     item: &MediaItem,
     options: &DownloadOptions,
     output_dir: &str,
     settings: &crate::models::AppSettings,
 ) -> AppResult<crate::sidecar::SidecarJob> {
-    let client = client.clone();
     let item = item.clone();
     let options = options.clone();
     let output_dir = output_dir.to_string();
@@ -238,6 +231,7 @@ async fn try_submit_download(
     tokio::time::timeout(
         SUBMIT_TIMEOUT,
         tokio::task::spawn_blocking(move || {
+            let client = sidecar.client()?;
             client.start_download(&item, &options, &output_dir, &settings)
         }),
     )
@@ -253,12 +247,17 @@ async fn try_submit_download(
 }
 
 async fn poll_job(port: u16, job_id: &str) -> AppResult<crate::sidecar::SidecarJob> {
-    let client = SidecarClient::with_timeout(port, Duration::from_secs(5))?;
     let job_id = job_id.to_string();
 
     tokio::time::timeout(
         POLL_TIMEOUT,
-        tokio::task::spawn_blocking(move || client.get_job(&job_id)),
+        tokio::task::spawn_blocking(move || {
+            let client = crate::sidecar::SidecarClient::with_timeout(
+                port,
+                Duration::from_secs(5),
+            )?;
+            client.get_job(&job_id)
+        }),
     )
     .await
     .map_err(|_| {

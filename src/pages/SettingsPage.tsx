@@ -60,6 +60,15 @@ export function SettingsPage() {
 
   const validateFfmpegMutation = useMutation({
     mutationFn: () => validateFfmpeg(draft?.ffmpegPath ?? "ffmpeg"),
+    onSuccess: (status) => {
+      if (!status.valid || !status.resolvedPath || !draft) return;
+      if (
+        (draft.ffmpegPath.trim() === "" || draft.ffmpegPath.trim() === "ffmpeg") &&
+        status.resolvedPath !== draft.ffmpegPath
+      ) {
+        setDraft({ ...draft, ffmpegPath: status.resolvedPath });
+      }
+    },
   });
 
   if (!draft) {
@@ -191,21 +200,6 @@ export function SettingsPage() {
             description="公开视频通常无需登录；扫码后可下载高画质或会员内容。"
             loginLabel="扫码登录"
             cookieField="bilibiliCookies"
-            draft={draft}
-            onDraftChange={setDraft}
-            onSaved={(settings) => {
-              setDraft(settings);
-              queryClient.setQueryData(["settings"], settings);
-              setSaved(true);
-              setTimeout(() => setSaved(false), 2000);
-            }}
-          />
-          <PlatformAuthCard
-            platform="douyin"
-            title="抖音"
-            description="解析、搜索与下载通常需要登录。已登录后无需重复操作；更换账号可点重新登录。"
-            loginLabel="打开登录窗口"
-            cookieField="douyinCookies"
             draft={draft}
             onDraftChange={setDraft}
             onSaved={(settings) => {

@@ -41,7 +41,6 @@ type DateRange = "all" | "7d" | "30d" | "90d";
 
 const PLATFORMS: Array<{ value: Platform | ""; label: string }> = [
   { value: "", label: "全部平台" },
-  { value: "douyin", label: "抖音" },
   { value: "bilibili", label: "Bilibili" },
 ];
 

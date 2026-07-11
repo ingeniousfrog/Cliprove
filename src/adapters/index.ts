@@ -44,7 +44,7 @@ function createClientAdapter(id: "douyin" | "bilibili", name: string): PlatformA
 export const douyinAdapter = createClientAdapter("douyin", "抖音");
 export const bilibiliAdapter = createClientAdapter("bilibili", "Bilibili");
 
-export const adapters: PlatformAdapter[] = [douyinAdapter, bilibiliAdapter];
+export const adapters: PlatformAdapter[] = [bilibiliAdapter];
 
 export function detectAdapter(input: string): PlatformAdapter | undefined {
   return adapters.find((adapter) => adapter.canHandle(input));

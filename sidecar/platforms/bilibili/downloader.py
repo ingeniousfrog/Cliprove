@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import shutil
 import urllib.request
 from pathlib import Path
 from typing import Any
@@ -13,6 +12,7 @@ import yt_dlp
 
 from platforms.cookies import write_netscape_cookie_file
 from platforms.cover_url import normalize_cover_url
+from platforms.ffmpeg_resolve import resolve_ffmpeg_path
 
 
 def _format_selector(quality_id: str | None) -> str:
@@ -93,8 +93,14 @@ def _download_video_sync(
         "skip_download": not save_video,
     }
 
-    if shutil.which(ffmpeg_path) or Path(ffmpeg_path).exists():
-        ydl_opts["ffmpeg_location"] = ffmpeg_path
+    resolved_ffmpeg = resolve_ffmpeg_path(ffmpeg_path)
+    if resolved_ffmpeg:
+        ydl_opts["ffmpeg_location"] = resolved_ffmpeg
+    elif save_video:
+        raise RuntimeError(
+            "未找到 FFmpeg。macOS 可在设置中填写 /opt/homebrew/bin/ffmpeg，"
+            "或先执行 brew install ffmpeg"
+        )
 
     if cookie_file:
         ydl_opts["cookiefile"] = str(cookie_file)

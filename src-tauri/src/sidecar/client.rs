@@ -12,7 +12,6 @@ use crate::models::{
 
 #[derive(Clone)]
 pub struct SidecarClient {
-    port: u16,
     base_url: String,
     http: Client,
 }
@@ -29,14 +28,9 @@ impl SidecarClient {
             .timeout(timeout)
             .build()?;
         Ok(Self {
-            port,
             base_url: format!("http://127.0.0.1:{port}"),
             http,
         })
-    }
-
-    pub fn port(&self) -> u16 {
-        self.port
     }
 
     pub fn health(&self) -> AppResult<SidecarHealth> {
