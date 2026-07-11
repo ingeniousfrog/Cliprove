@@ -42,6 +42,7 @@ pub fn run() {
             commands::search_media,
             commands::create_download_spec,
             commands::enqueue_download,
+            commands::enqueue_download_batch,
             commands::list_tasks,
             commands::task_action,
             commands::list_library,

@@ -5,6 +5,7 @@ import type {
   AuthStatus,
   Collection,
   DownloadOptions,
+  BatchEnqueueResult,
   DownloadSpec,
   DownloadTask,
   LibraryFilter,
@@ -37,6 +38,13 @@ export async function enqueueDownload(
   options: DownloadOptions
 ): Promise<string> {
   return invoke<string>("enqueue_download", { item, options });
+}
+
+export async function enqueueDownloadBatch(
+  items: MediaItem[],
+  options: DownloadOptions
+): Promise<BatchEnqueueResult> {
+  return invoke<BatchEnqueueResult>("enqueue_download_batch", { items, options });
 }
 
 export async function listTasks(): Promise<DownloadTask[]> {

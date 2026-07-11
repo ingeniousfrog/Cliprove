@@ -255,3 +255,15 @@ export interface SidecarHealth {
   status: string;
   version?: string;
 }
+
+export interface BatchEnqueueItemResult {
+  platformItemId: string;
+  status: "enqueued" | "skipped" | "failed" | string;
+  taskId?: string;
+  message?: string;
+}
+
+export interface BatchEnqueueResult {
+  results: BatchEnqueueItemResult[];
+  enqueuedCount: number;
+}

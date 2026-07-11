@@ -18,6 +18,7 @@ import type { AppSettings } from "@/types";
 export function SettingsPage() {
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState<AppSettings | null>(null);
+  const [dirty, setDirty] = useState(false);
   const [saved, setSaved] = useState(false);
 
   const settingsQuery = useQuery({
@@ -37,20 +38,26 @@ export function SettingsPage() {
   });
 
   useEffect(() => {
-    if (settingsQuery.data) {
+    if (settingsQuery.data && !dirty) {
       setDraft(settingsQuery.data);
     }
-  }, [settingsQuery.data]);
+  }, [settingsQuery.data, dirty]);
 
   const saveMutation = useMutation({
     mutationFn: (settings: Partial<AppSettings>) => updateSettings(settings),
     onSuccess: (data) => {
       setDraft(data);
+      setDirty(false);
       setSaved(true);
       queryClient.setQueryData(["settings"], data);
       setTimeout(() => setSaved(false), 2000);
     },
   });
+
+  const persistDraft = (next: AppSettings) => {
+    setDraft(next);
+    saveMutation.mutate(next);
+  };
 
   const startSidecarMutation = useMutation({
     mutationFn: startSidecar,
@@ -61,13 +68,10 @@ export function SettingsPage() {
   const validateFfmpegMutation = useMutation({
     mutationFn: () => validateFfmpeg(draft?.ffmpegPath ?? "ffmpeg"),
     onSuccess: (status) => {
-      if (!status.valid || !status.resolvedPath || !draft) return;
-      if (
-        (draft.ffmpegPath.trim() === "" || draft.ffmpegPath.trim() === "ffmpeg") &&
-        status.resolvedPath !== draft.ffmpegPath
-      ) {
-        setDraft({ ...draft, ffmpegPath: status.resolvedPath });
-      }
+      if (!status.valid || !draft) return;
+      const nextPath = status.resolvedPath?.trim() || draft.ffmpegPath;
+      if (nextPath === draft.ffmpegPath) return;
+      persistDraft({ ...draft, ffmpegPath: nextPath });
     },
   });
 
@@ -81,6 +85,7 @@ export function SettingsPage() {
     key: K,
     value: AppSettings[K]
   ) => {
+    setDirty(true);
     setDraft((current) => (current ? { ...current, [key]: value } : current));
   };
 
@@ -169,19 +174,26 @@ export function SettingsPage() {
             <Input
               value={draft.ffmpegPath}
               onChange={(event) => updateField("ffmpegPath", event.target.value)}
+              onBlur={() => {
+                if (!draft) return;
+                persistDraft(draft);
+              }}
             />
           </Field>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               size="sm"
               variant="secondary"
               onClick={() => validateFfmpegMutation.mutate()}
+              disabled={validateFfmpegMutation.isPending}
             >
-              验证 FFmpeg
+              验证并保存 FFmpeg
             </Button>
             {validateFfmpegMutation.data ? (
               <Badge tone={validateFfmpegMutation.data.valid ? "success" : "danger"}>
-                {validateFfmpegMutation.data.message}
+                {validateFfmpegMutation.data.valid && validateFfmpegMutation.data.resolvedPath
+                  ? `已就绪：${validateFfmpegMutation.data.resolvedPath}`
+                  : validateFfmpegMutation.data.message}
               </Badge>
             ) : null}
           </div>
@@ -264,7 +276,7 @@ export function SettingsPage() {
       </Card>
 
       <div className="flex items-center gap-3">
-        <Button onClick={() => saveMutation.mutate(draft)} disabled={saveMutation.isPending}>
+        <Button onClick={() => draft && persistDraft(draft)} disabled={saveMutation.isPending}>
           {saveMutation.isPending ? "保存中…" : "保存设置"}
         </Button>
         {saved ? <span className="text-sm text-emerald-600">已保存</span> : null}

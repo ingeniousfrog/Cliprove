@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { CoverImage } from "@/components/media/CoverImage";
 import { MediaPreviewDialog } from "@/components/media/MediaPreviewDialog";
-import { enqueueDownload, searchMedia } from "@/lib/tauri";
+import { enqueueDownloadBatch, searchMedia } from "@/lib/tauri";
 import { cn, formatDuration, formatInvokeError, platformLabel } from "@/lib/utils";
 import type { MediaItem, Platform, SearchPage } from "@/types";
 
@@ -49,6 +49,7 @@ export function SearchPage() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [batchMessage, setBatchMessage] = useState<string | null>(null);
   const [previewItem, setPreviewItem] = useState<MediaItem | null>(null);
   const queryClient = useQueryClient();
   const parentRef = useRef<HTMLDivElement>(null);
@@ -75,6 +76,7 @@ export function SearchPage() {
     if (!keyword.trim()) return;
     setIsSearching(true);
     setSearchError(null);
+    setBatchMessage(null);
     setSelected([]);
     setHasSearched(true);
     try {
@@ -110,26 +112,43 @@ export function SearchPage() {
     setHasMore(page.hasMore);
   };
 
+  const buildDownloadOptions = (item: MediaItem) => ({
+    assets:
+      item.mediaType === "image_post"
+        ? ["images", "cover", "metadata"]
+        : item.platform === "bilibili"
+          ? ["video", "cover", "metadata", "subtitle"]
+          : ["video", "cover", "metadata"],
+    saveCover: true,
+    saveMetadata: true,
+    saveSubtitles: item.platform === "bilibili",
+  });
+
   const batchMutation = useMutation({
     mutationFn: async (items: MediaItem[]) => {
-      for (const item of items) {
-        await enqueueDownload(item, {
-          assets:
-            item.mediaType === "image_post"
-              ? ["images", "cover", "metadata"]
-              : item.platform === "bilibili"
-                ? ["video", "cover", "metadata", "subtitle"]
-                : ["video", "cover", "metadata"],
-          saveCover: true,
-          saveMetadata: true,
-          saveSubtitles: item.platform === "bilibili",
-        });
+      if (items.length === 0) {
+        throw new Error("请先选择要下载的视频");
       }
+      const result = await enqueueDownloadBatch(items, buildDownloadOptions(items[0]));
+      if (result.enqueuedCount === 0) {
+        const firstSkip = result.results.find((entry) => entry.message)?.message;
+        throw new Error(firstSkip ?? "没有可加入队列的下载任务");
+      }
+      return result;
     },
-    onSuccess: async () => {
+    onSuccess: async (result) => {
+      const skipped = result.results.filter((entry) => entry.status === "skipped").length;
+      setBatchMessage(
+        skipped > 0
+          ? `已加入 ${result.enqueuedCount} 个下载任务，跳过 ${skipped} 个（已在库中或正在下载）`
+          : `已加入 ${result.enqueuedCount} 个下载任务`
+      );
       setSelected([]);
       await queryClient.invalidateQueries({ queryKey: ["tasks"] });
       await queryClient.invalidateQueries({ queryKey: ["library"] });
+    },
+    onError: (error) => {
+      setBatchMessage(formatInvokeError(error));
     },
   });
 
@@ -268,6 +287,19 @@ export function SearchPage() {
       {searchError ? (
         <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {searchError}
+        </div>
+      ) : null}
+
+      {batchMessage ? (
+        <div
+          className={cn(
+            "rounded-md border px-3 py-2 text-sm",
+            batchMessage.startsWith("已加入")
+              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+              : "border-amber-200 bg-amber-50 text-amber-800"
+          )}
+        >
+          {batchMessage}
         </div>
       ) : null}
 
@@ -446,17 +478,26 @@ function ResultCard({
           : "border-slate-200 bg-white hover:border-slate-300"
       )}
     >
-      <button
-        type="button"
-        className="mb-2 block w-full overflow-hidden rounded-md"
-        onClick={onPreview}
-      >
-        <CoverImage
-          src={item.coverUrl}
-          platform={item.platform}
-          className="aspect-video w-full"
+      <div className="mb-2 flex items-start gap-2">
+        <input
+          type="checkbox"
+          checked={active}
+          onChange={onToggle}
+          className="mt-1"
+          aria-label={`选择 ${item.title}`}
         />
-      </button>
+        <button
+          type="button"
+          className="block flex-1 overflow-hidden rounded-md"
+          onClick={onPreview}
+        >
+          <CoverImage
+            src={item.coverUrl}
+            platform={item.platform}
+            className="aspect-video w-full"
+          />
+        </button>
+      </div>
       <button type="button" className="w-full text-left" onClick={onToggle}>
         <div className="line-clamp-2 text-sm font-medium">{item.title}</div>
         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">

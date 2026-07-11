@@ -71,6 +71,22 @@ pub struct SearchPage {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct BatchEnqueueItemResult {
+    pub platform_item_id: String,
+    pub status: String,
+    pub task_id: Option<String>,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchEnqueueResult {
+    pub results: Vec<BatchEnqueueItemResult>,
+    pub enqueued_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DownloadOptions {
     pub assets: Vec<String>,
     pub quality_id: Option<String>,

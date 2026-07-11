@@ -53,20 +53,18 @@ fn ffmpeg_candidates(path: &str) -> Vec<PathBuf> {
     let trimmed = path.trim();
     if trimmed.is_empty() || trimmed == "ffmpeg" {
         vec![
-            PathBuf::from("ffmpeg"),
             PathBuf::from("/opt/homebrew/bin/ffmpeg"),
             PathBuf::from("/usr/local/bin/ffmpeg"),
             PathBuf::from("/usr/bin/ffmpeg"),
+            PathBuf::from("ffmpeg"),
         ]
     } else {
         vec![PathBuf::from(trimmed)]
     }
 }
 
-pub fn validate_ffmpeg(path: &str) -> AppResult<(bool, String, Option<String>)> {
-    let candidates = ffmpeg_candidates(path);
-
-    for candidate in candidates {
+pub fn resolve_ffmpeg_path(path: &str) -> Option<PathBuf> {
+    for candidate in ffmpeg_candidates(path) {
         let output = match Command::new(&candidate).arg("-version").output() {
             Ok(output) => output,
             Err(_) => continue,
@@ -76,12 +74,44 @@ pub fn validate_ffmpeg(path: &str) -> AppResult<(bool, String, Option<String>)> 
             continue;
         }
 
+        if candidate.is_absolute() {
+            return candidate.canonicalize().ok().or(Some(candidate));
+        }
+
+        for absolute in [
+            "/opt/homebrew/bin/ffmpeg",
+            "/usr/local/bin/ffmpeg",
+            "/usr/bin/ffmpeg",
+        ] {
+            let resolved = PathBuf::from(absolute);
+            if resolved.is_file() {
+                return resolved.canonicalize().ok().or(Some(resolved));
+            }
+        }
+
+        return Some(candidate);
+    }
+
+    None
+}
+
+pub fn validate_ffmpeg(path: &str) -> AppResult<(bool, String, Option<String>)> {
+    if let Some(resolved) = resolve_ffmpeg_path(path) {
+        let output = Command::new(&resolved)
+            .arg("-version")
+            .output()
+            .map_err(|error| AppError::Message(error.to_string()))?;
+
         let version_line = String::from_utf8_lossy(&output.stdout)
             .lines()
             .next()
             .unwrap_or("FFmpeg")
             .to_string();
-        return Ok((true, version_line, Some(candidate.to_string_lossy().to_string())));
+        return Ok((
+            true,
+            version_line,
+            Some(resolved.to_string_lossy().to_string()),
+        ));
     }
 
     Ok((

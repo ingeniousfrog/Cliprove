@@ -53,6 +53,20 @@ impl<'a> TaskRepository<'a> {
         .map_err(AppError::from)
     }
 
+    pub fn has_active(&self, platform: &str, platform_item_id: &str) -> AppResult<bool> {
+        let conn = self.conn.lock().map_err(|_| {
+            AppError::Message("database lock poisoned".to_string())
+        })?;
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(1) FROM download_tasks
+             WHERE platform = ?1 AND platform_item_id = ?2
+               AND status IN ('queued', 'parsing', 'downloading', 'post_processing')",
+            params![platform, platform_item_id],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
     pub fn insert(
         &self,
         item: &MediaItem,

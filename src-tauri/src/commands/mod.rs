@@ -6,9 +6,9 @@ use crate::app_state::AppState;
 use crate::errors::{AppError, AppResult};
 use crate::mock;
 use crate::models::{
-    AppSettings, AuthStatus, Collection, DownloadOptions, DownloadSpec, DownloadTask,
-    FfmpegStatus, LibraryFilter, LibraryItem, MediaItem, ParsedMedia, PlatformLoginSession,
-    SearchPage, SidecarHealth, Tag,
+    AppSettings, AuthStatus, BatchEnqueueItemResult, BatchEnqueueResult, Collection,
+    DownloadOptions, DownloadSpec, DownloadTask, FfmpegStatus, LibraryFilter, LibraryItem,
+    MediaItem, ParsedMedia, PlatformLoginSession, SearchPage, SidecarHealth, Tag,
 };
 use crate::shell;
 use crate::tasks;
@@ -33,6 +33,69 @@ fn ensure_sidecar(state: &AppState, platform: &str) -> AppResult<()> {
         state.sidecar.start()?;
     }
     Ok(())
+}
+
+fn output_dir_for_item(settings: &AppSettings, item: &MediaItem) -> String {
+    format!(
+        "{}/{}/{}/{}",
+        settings.download_directory,
+        item.platform,
+        item.author.id,
+        item.platform_item_id
+    )
+}
+
+enum EnqueueOutcome {
+    Enqueued(String),
+    Skipped(String),
+}
+
+fn enqueue_one(
+    app: &tauri::AppHandle,
+    state: &Arc<AppState>,
+    item: MediaItem,
+    options: &DownloadOptions,
+    skip_if_in_library: bool,
+    skip_if_pending: bool,
+    ensure_engine: bool,
+) -> AppResult<EnqueueOutcome> {
+    if skip_if_in_library
+        && !options.force_replace.unwrap_or(false)
+        && state
+            .db
+            .library()
+            .exists(&item.platform, &item.platform_item_id)?
+    {
+        return Ok(EnqueueOutcome::Skipped("已在本地库中".to_string()));
+    }
+
+    if skip_if_pending
+        && state
+            .db
+            .tasks()
+            .has_active(&item.platform, &item.platform_item_id)?
+    {
+        return Ok(EnqueueOutcome::Skipped("已有进行中的下载任务".to_string()));
+    }
+
+    let settings = state.db.settings().get_all()?;
+    let output_dir = output_dir_for_item(&settings, &item);
+    let task = state.db.tasks().insert(&item, options, &output_dir)?;
+
+    if ensure_engine {
+        ensure_sidecar(state, &item.platform)?;
+    }
+
+    tasks::spawn_task(
+        app.clone(),
+        Arc::clone(state),
+        task.id.clone(),
+        item,
+        output_dir,
+        options.clone(),
+    );
+
+    Ok(EnqueueOutcome::Enqueued(task.id))
 }
 
 #[tauri::command]
@@ -84,45 +147,83 @@ pub fn enqueue_download(
     options: DownloadOptions,
 ) -> Result<String, String> {
     run(|| {
-        let settings = state.db.settings().get_all()?;
-        if !options.force_replace.unwrap_or(false)
-            && state
-                .db
-                .library()
-                .exists(&item.platform, &item.platform_item_id)?
-        {
-            return Err(AppError::structured(
+        match enqueue_one(
+            &app,
+            state.inner(),
+            item,
+            &options,
+            false,
+            true,
+            true,
+        )? {
+            EnqueueOutcome::Enqueued(task_id) => Ok(task_id),
+            EnqueueOutcome::Skipped(message) => Err(AppError::structured(
                 "content_unavailable",
-                "该内容已在本地库中",
+                message,
                 Some("如需重新下载，请使用重试并覆盖（后续将提供显式覆盖选项）".to_string()),
-            ));
+            )),
+        }
+    })
+}
+
+#[tauri::command]
+pub fn enqueue_download_batch(
+    app: tauri::AppHandle,
+    state: State<Arc<AppState>>,
+    items: Vec<MediaItem>,
+    options: DownloadOptions,
+) -> Result<BatchEnqueueResult, String> {
+    run(|| {
+        if items.is_empty() {
+            return Ok(BatchEnqueueResult {
+                results: Vec::new(),
+                enqueued_count: 0,
+            });
         }
 
-        let output_dir = format!(
-            "{}/{}/{}/{}",
-            settings.download_directory,
-            item.platform,
-            item.author.id,
-            item.platform_item_id
-        );
+        if let Some(first) = items.first() {
+            ensure_sidecar(&state, &first.platform)?;
+        }
 
-        let task = state
-            .db
-            .tasks()
-            .insert(&item, &options, &output_dir)?;
+        let mut results = Vec::with_capacity(items.len());
+        for item in items {
+            let platform_item_id = item.platform_item_id.clone();
+            let outcome = enqueue_one(
+                &app,
+                state.inner(),
+                item,
+                &options,
+                true,
+                true,
+                false,
+            )?;
 
-        ensure_sidecar(&state, &item.platform)?;
+            let result = match outcome {
+                EnqueueOutcome::Enqueued(task_id) => BatchEnqueueItemResult {
+                    platform_item_id,
+                    status: "enqueued".to_string(),
+                    task_id: Some(task_id),
+                    message: None,
+                },
+                EnqueueOutcome::Skipped(message) => BatchEnqueueItemResult {
+                    platform_item_id,
+                    status: "skipped".to_string(),
+                    task_id: None,
+                    message: Some(message),
+                },
+            };
+            results.push(result);
+        }
 
-        tasks::spawn_task(
-            app,
-            Arc::clone(state.inner()),
-            task.id.clone(),
-            item,
-            output_dir,
-            options,
-        );
+        let enqueued_count = results
+            .iter()
+            .filter(|result| result.status == "enqueued")
+            .count();
 
-        Ok(task.id)
+        Ok(BatchEnqueueResult {
+            results,
+            enqueued_count,
+        })
     })
 }
 
@@ -362,7 +463,18 @@ pub fn get_app_paths(state: State<Arc<AppState>>) -> Result<serde_json::Value, S
 
 #[tauri::command]
 pub fn get_settings(state: State<Arc<AppState>>) -> Result<AppSettings, String> {
-    run(|| state.db.settings().get_all())
+    run(|| {
+        let settings = state.db.settings().get_all()?;
+        if let Some(resolved) = shell::resolve_ffmpeg_path(&settings.ffmpeg_path) {
+            let resolved_str = resolved.to_string_lossy().to_string();
+            if resolved_str != settings.ffmpeg_path {
+                let mut partial = settings;
+                partial.ffmpeg_path = resolved_str;
+                return state.db.settings().update(&partial);
+            }
+        }
+        Ok(settings)
+    })
 }
 
 #[tauri::command]
