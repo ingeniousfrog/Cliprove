@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 from typing import Any
 
 try:
@@ -15,9 +16,10 @@ except ImportError as exc:  # pragma: no cover
     ) from exc
 
 from jobs import Job, JobManager
+from platforms.bilibili.service import bilibili_service
 from platforms.douyin.service import douyin_service
 
-APP_VERSION = "0.3.0-phase2"
+APP_VERSION = "0.4.0-phase3"
 job_manager = JobManager()
 
 app = FastAPI(title="Cliprove Sidecar", version=APP_VERSION)
@@ -25,8 +27,11 @@ app = FastAPI(title="Cliprove Sidecar", version=APP_VERSION)
 
 class ParseRequest(BaseModel):
     url: str
-    cookies: str = ""
+    douyin_cookies: str = Field(default="", alias="douyinCookies")
+    bilibili_cookies: str = Field(default="", alias="bilibiliCookies")
     proxy: str = ""
+
+    model_config = {"populate_by_name": True}
 
 
 class DownloadRequest(BaseModel):
@@ -34,7 +39,11 @@ class DownloadRequest(BaseModel):
     platform_item_id: str = Field(alias="platformItemId")
     output_dir: str = Field(alias="outputDir")
     asset_ids: list[str] = Field(default_factory=list, alias="assetIds")
-    cookies: str = ""
+    canonical_url: str | None = Field(default=None, alias="canonicalUrl")
+    quality_id: str | None = Field(default=None, alias="qualityId")
+    douyin_cookies: str = Field(default="", alias="douyinCookies")
+    bilibili_cookies: str = Field(default="", alias="bilibiliCookies")
+    ffmpeg_path: str = Field(default="ffmpeg", alias="ffmpegPath")
     proxy: str = ""
 
     model_config = {"populate_by_name": True}
@@ -52,7 +61,8 @@ class SearchRequest(BaseModel):
     cursor: str | None = None
     page_size: int = Field(default=20, alias="pageSize")
     filters: dict[str, str] | None = None
-    cookies: str = ""
+    douyin_cookies: str = Field(default="", alias="douyinCookies")
+    bilibili_cookies: str = Field(default="", alias="bilibiliCookies")
     proxy: str = ""
 
     model_config = {"populate_by_name": True}
@@ -69,7 +79,13 @@ async def parse_media(request: ParseRequest) -> dict[str, Any]:
         if _is_douyin(request.url):
             return await douyin_service.parse(
                 request.url,
-                cookies=request.cookies,
+                cookies=request.douyin_cookies,
+                proxy=request.proxy,
+            )
+        if _is_bilibili(request.url):
+            return await bilibili_service.parse(
+                request.url,
+                cookies=request.bilibili_cookies,
                 proxy=request.proxy,
             )
         raise HTTPException(status_code=400, detail="unsupported_link")
@@ -83,19 +99,33 @@ async def parse_media(request: ParseRequest) -> dict[str, Any]:
 
 @app.post("/v1/download")
 async def start_download(request: DownloadRequest) -> dict[str, Any]:
-    if request.platform != "douyin":
+    if request.platform not in {"douyin", "bilibili"}:
         raise HTTPException(status_code=400, detail="unsupported platform")
 
     async def run(job: Job) -> dict[str, Any]:
         job.stage = "downloading"
         job.progress = 0.2
-        result = await douyin_service.download(
-            platform_item_id=request.platform_item_id,
-            output_dir=request.output_dir,
-            asset_ids=request.asset_ids or ["video", "cover", "metadata"],
-            cookies=request.cookies,
-            proxy=request.proxy,
-        )
+        if request.platform == "douyin":
+            result = await douyin_service.download(
+                platform_item_id=request.platform_item_id,
+                output_dir=request.output_dir,
+                asset_ids=request.asset_ids or ["video", "cover", "metadata"],
+                cookies=request.douyin_cookies,
+                proxy=request.proxy,
+            )
+        else:
+            canonical = request.canonical_url or (
+                f"https://www.bilibili.com/video/{request.platform_item_id}"
+            )
+            result = await bilibili_service.download(
+                canonical_url=canonical,
+                output_dir=request.output_dir,
+                asset_ids=request.asset_ids or ["video", "cover", "metadata"],
+                cookies=request.bilibili_cookies,
+                proxy=request.proxy,
+                ffmpeg_path=request.ffmpeg_path,
+                quality_id=request.quality_id,
+            )
         job.progress = 0.95
         return result
 
@@ -121,7 +151,16 @@ async def search_media(request: SearchRequest) -> dict[str, Any]:
                 cursor=request.cursor,
                 page_size=request.page_size,
                 filters=request.filters,
-                cookies=request.cookies,
+                cookies=request.douyin_cookies,
+                proxy=request.proxy,
+            )
+        if request.platform == "bilibili":
+            return await bilibili_service.search(
+                request.keyword,
+                cursor=request.cursor,
+                page_size=request.page_size,
+                filters=request.filters,
+                cookies=request.bilibili_cookies,
                 proxy=request.proxy,
             )
         raise HTTPException(status_code=400, detail="unsupported platform")
@@ -140,10 +179,15 @@ async def validate_auth(request: AuthRequest) -> dict[str, Any]:
             cookies=request.cookies,
             proxy=request.proxy,
         )
+    if request.platform == "bilibili":
+        return await bilibili_service.validate_auth(
+            cookies=request.cookies,
+            proxy=request.proxy,
+        )
     return {
         "platform": request.platform,
         "valid": False,
-        "message": "该平台尚未接入真实引擎",
+        "message": "不支持的平台",
     }
 
 
@@ -152,6 +196,16 @@ def _is_douyin(url: str) -> bool:
     return any(
         token in lowered
         for token in ("douyin.com", "iesdouyin.com", "v.douyin.com")
+    )
+
+
+def _is_bilibili(url: str) -> bool:
+    lowered = url.lower()
+    return (
+        "bilibili.com" in lowered
+        or "b23.tv" in lowered
+        or bool(re.fullmatch(r"bv[\w]+", url.strip(), flags=re.IGNORECASE))
+        or bool(re.fullmatch(r"av\d+", url.strip(), flags=re.IGNORECASE))
     )
 
 

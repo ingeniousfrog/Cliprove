@@ -18,6 +18,7 @@ import type { DownloadOptions } from "@/types";
 export function HomePage() {
   const [url, setUrl] = useState("");
   const [selectedAssets, setSelectedAssets] = useState<string[]>([]);
+  const [selectedQuality, setSelectedQuality] = useState<string>("best");
   const queryClient = useQueryClient();
   const { parsedMedia, setParsedMedia } = useAppStore();
 
@@ -28,6 +29,7 @@ export function HomePage() {
     onSuccess: (data) => {
       setParsedMedia(data);
       setSelectedAssets(data.assets.map((asset) => asset.id));
+      setSelectedQuality(data.qualities?.[0]?.id ?? "best");
     },
   });
 
@@ -36,9 +38,11 @@ export function HomePage() {
       if (!parsedMedia) return;
       const options: DownloadOptions = {
         assets: selectedAssets,
+        qualityId: selectedQuality,
         saveCover: selectedAssets.includes("cover"),
         saveAudio: selectedAssets.includes("audio"),
         saveMetadata: selectedAssets.includes("metadata"),
+        saveSubtitles: selectedAssets.includes("subtitle"),
       };
       await enqueueDownload(parsedMedia.item, options);
     },
@@ -158,6 +162,23 @@ export function HomePage() {
                 })}
               </div>
             </div>
+
+            {parsedMedia.qualities && parsedMedia.qualities.length > 0 ? (
+              <div className="space-y-1">
+                <div className="text-sm font-medium text-slate-800">清晰度</div>
+                <select
+                  className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm"
+                  value={selectedQuality}
+                  onChange={(event) => setSelectedQuality(event.target.value)}
+                >
+                  {parsedMedia.qualities.map((quality) => (
+                    <option key={quality.id} value={quality.id}>
+                      {quality.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
 
             <div className="flex justify-end">
               <Button

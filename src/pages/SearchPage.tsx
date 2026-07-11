@@ -21,6 +21,13 @@ const DOUYIN_SORT_OPTIONS = [
   { value: "latest", label: "最新发布" },
 ];
 
+const BILIBILI_SORT_OPTIONS = [
+  { value: "total", label: "综合排序" },
+  { value: "click", label: "最多播放" },
+  { value: "pubdate", label: "最新发布" },
+  { value: "dm", label: "最多弹幕" },
+];
+
 const DOUYIN_TIME_OPTIONS = [
   { value: "all", label: "不限时间" },
   { value: "day", label: "一天内" },
@@ -46,8 +53,9 @@ export function SearchPage() {
   const parentRef = useRef<HTMLDivElement>(null);
 
   const filters = useMemo(() => {
-    if (platform !== "douyin") return undefined;
-    return { sort, publish_time: publishTime };
+    if (platform === "douyin") return { sort, publish_time: publishTime };
+    if (platform === "bilibili") return { sort };
+    return undefined;
   }, [platform, sort, publishTime]);
 
   const runSearch = useCallback(
@@ -108,9 +116,12 @@ export function SearchPage() {
           assets:
             item.mediaType === "image_post"
               ? ["images", "cover", "metadata"]
-              : ["video", "cover", "metadata"],
+              : item.platform === "bilibili"
+                ? ["video", "cover", "metadata", "subtitle"]
+                : ["video", "cover", "metadata"],
           saveCover: true,
           saveMetadata: true,
+          saveSubtitles: item.platform === "bilibili",
         });
       }
     },
@@ -156,13 +167,15 @@ export function SearchPage() {
 
   const showDouyinFilters =
     platform === "douyin" && supportedFilters.length > 0;
+  const showBilibiliFilters =
+    platform === "bilibili" && supportedFilters.length > 0;
 
   return (
     <div className="mx-auto flex h-full max-w-6xl flex-col gap-4 p-6">
       <div>
         <h1 className="text-xl font-semibold">关键词搜索</h1>
         <p className="mt-1 text-sm text-slate-500">
-          抖音已接入真实搜索；支持筛选、分页加载、多选批量下载。
+          抖音与 Bilibili 均已接入真实搜索；支持筛选、分页加载、多选批量下载。
         </p>
       </div>
 
@@ -175,11 +188,13 @@ export function SearchPage() {
                 className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm"
                 value={platform}
                 onChange={(event) => {
-                  setPlatform(event.target.value as Platform);
+                  const next = event.target.value as Platform;
+                  setPlatform(next);
                   setResults([]);
                   setSelected([]);
                   setCursor(undefined);
                   setHasMore(false);
+                  setSort(next === "bilibili" ? "total" : "general");
                 }}
               >
                 {adapters.map((item) => (
@@ -241,10 +256,17 @@ export function SearchPage() {
                 onChange={setPublishTime}
               />
             </div>
-          ) : platform === "bilibili" ? (
-            <p className="text-xs text-slate-400">
-              Bilibili 筛选将在 Phase 3 接入；当前为 Mock 搜索结果。
-            </p>
+          ) : null}
+
+          {showBilibiliFilters ? (
+            <div className="flex flex-wrap gap-3 border-t border-slate-100 pt-3">
+              <FilterSelect
+                label="排序"
+                value={sort}
+                options={BILIBILI_SORT_OPTIONS}
+                onChange={setSort}
+              />
+            </div>
           ) : null}
         </CardBody>
       </Card>

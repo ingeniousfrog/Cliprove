@@ -7,9 +7,19 @@ Local-first desktop app for searching, collecting, and managing publicly accessi
 - **Desktop**: Tauri v2 + Rust
 - **UI**: React + TypeScript + Vite + Tailwind CSS
 - **Data**: SQLite (application database)
-- **Engine**: Python sidecar (FastAPI) — Phase 0 health check only
+- **Engine**: Python sidecar (FastAPI) — Douyin + Bilibili
 
-## Phase 2 status
+## Phase 3 status
+
+Bilibili link parse/search/download via sidecar:
+
+- `yt-dlp` for parse/download (quality, subtitles, multi-part, FFmpeg merge)
+- `bilibili-api-python` for keyword search with sort filters
+- Cookie support for SESSDATA (high quality / member streams)
+- Home page: quality selection for Bilibili downloads
+- Search page: Bilibili sort filters + batch download with subtitles
+
+## Phase 2 status (completed)
 
 Douyin keyword search is wired to the real engine:
 

@@ -5,3 +5,5 @@ aiofiles>=23.2.1
 pyyaml>=6.0.1
 python-dateutil>=2.8.2
 gmssl>=3.2.2
+yt-dlp>=2025.1.0
+bilibili-api-python>=17.4.0

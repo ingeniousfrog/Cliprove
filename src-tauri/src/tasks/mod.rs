@@ -17,14 +17,14 @@ pub async fn run_task(
     output_dir: String,
     options: DownloadOptions,
 ) -> AppResult<()> {
-    if item.platform == "douyin" {
-        return run_douyin_task(app, db, sidecar, task_id, item, output_dir, options).await;
+    if item.platform == "douyin" || item.platform == "bilibili" {
+        return run_sidecar_task(app, db, sidecar, task_id, item, output_dir, options).await;
     }
 
     run_mock_task(app, db, task_id, item, output_dir).await
 }
 
-async fn run_douyin_task(
+async fn run_sidecar_task(
     app: AppHandle,
     db: Arc<Database>,
     sidecar: Arc<SidecarManager>,
@@ -91,7 +91,7 @@ async fn run_douyin_task(
                 let error = StructuredError {
                     code: "engine_failure".to_string(),
                     message: message.clone(),
-                    suggestion: Some("检查抖音 Cookie、网络连接或稍后重试".to_string()),
+                    suggestion: Some("检查 Cookie、FFmpeg 路径与网络连接".to_string()),
                     technical_detail: Some(message),
                 };
                 db.tasks().mark_failed(&task_id, &error)?;

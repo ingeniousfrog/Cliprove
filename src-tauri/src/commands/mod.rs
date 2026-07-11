@@ -18,10 +18,25 @@ fn is_douyin_url(url: &str) -> bool {
         .any(|token| lowered.contains(token))
 }
 
+fn is_bilibili_url(url: &str) -> bool {
+    let lowered = url.to_lowercase();
+    lowered.contains("bilibili.com")
+        || lowered.contains("b23.tv")
+        || lowered.starts_with("bv")
+        || lowered.starts_with("av")
+}
+
+fn ensure_sidecar(state: &AppState, platform: &str) -> AppResult<()> {
+    if platform == "douyin" || platform == "bilibili" {
+        state.sidecar.start()?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn parse_link(state: State<AppState>, url: String) -> Result<ParsedMedia, String> {
     run(|| {
-        if is_douyin_url(&url) {
+        if is_douyin_url(&url) || is_bilibili_url(&url) {
             let settings = state.db.settings().get_all()?;
             state.sidecar.start()?;
             return state.sidecar.client()?.parse_link(&url, &settings);
@@ -38,9 +53,9 @@ pub fn search_media(
     cursor: Option<String>,
 ) -> Result<SearchPage, String> {
     run(|| {
-        if platform == "douyin" {
+        if platform == "douyin" || platform == "bilibili" {
             let settings = state.db.settings().get_all()?;
-            state.sidecar.start()?;
+            ensure_sidecar(&state, &platform)?;
             return state
                 .sidecar
                 .client()?
@@ -94,9 +109,7 @@ pub fn enqueue_download(
             .tasks()
             .insert(&item, &options, &output_dir)?;
 
-        if item.platform == "douyin" {
-            state.sidecar.start()?;
-        }
+        ensure_sidecar(&state, &item.platform)?;
 
         tasks::spawn_task(
             app,
@@ -155,9 +168,7 @@ pub fn task_action(
                         cover_url: None,
                         search_keyword: None,
                     };
-                    if item.platform == "douyin" {
-                        state.sidecar.start()?;
-                    }
+                    ensure_sidecar(&state, &item.platform)?;
                     tasks::spawn_task(
                         app,
                         Arc::clone(&state.db),
@@ -215,8 +226,8 @@ pub fn validate_platform_auth(
 ) -> Result<AuthStatus, String> {
     run(|| {
         let settings = state.db.settings().get_all()?;
-        if platform == "douyin" {
-            state.sidecar.start()?;
+        if platform == "douyin" || platform == "bilibili" {
+            ensure_sidecar(&state, &platform)?;
             return state
                 .sidecar
                 .client()?

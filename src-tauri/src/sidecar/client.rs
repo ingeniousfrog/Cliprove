@@ -19,7 +19,7 @@ pub struct SidecarClient {
 impl SidecarClient {
     pub fn new(port: u16) -> AppResult<Self> {
         let http = Client::builder()
-            .timeout(Duration::from_secs(120))
+            .timeout(Duration::from_secs(300))
             .build()?;
         Ok(Self {
             base_url: format!("http://127.0.0.1:{port}"),
@@ -34,7 +34,8 @@ impl SidecarClient {
     pub fn parse_link(&self, url: &str, settings: &AppSettings) -> AppResult<ParsedMedia> {
         let body = serde_json::json!({
             "url": url,
-            "cookies": settings.douyin_cookies,
+            "douyinCookies": settings.douyin_cookies,
+            "bilibiliCookies": settings.bilibili_cookies,
             "proxy": ""
         });
         self.post("/v1/parse", &body)
@@ -52,7 +53,11 @@ impl SidecarClient {
             "platformItemId": item.platform_item_id,
             "outputDir": output_dir,
             "assetIds": options.assets,
-            "cookies": settings.douyin_cookies,
+            "canonicalUrl": item.canonical_url,
+            "qualityId": options.quality_id,
+            "douyinCookies": settings.douyin_cookies,
+            "bilibiliCookies": settings.bilibili_cookies,
+            "ffmpegPath": settings.ffmpeg_path,
             "proxy": ""
         });
         self.post("/v1/download", &body)
@@ -75,7 +80,8 @@ impl SidecarClient {
             "cursor": cursor,
             "pageSize": query.page_size.unwrap_or(20),
             "filters": query.filters,
-            "cookies": settings.douyin_cookies,
+            "douyinCookies": settings.douyin_cookies,
+            "bilibiliCookies": settings.bilibili_cookies,
             "proxy": ""
         });
         self.post("/v1/search", &body)
@@ -128,7 +134,7 @@ impl SidecarClient {
                 "engine_failure"
             },
             detail,
-            Some("检查 Sidecar 日志与 Cookie 配置".to_string()),
+            Some("检查 Sidecar 日志、Cookie 与 FFmpeg 配置".to_string()),
         ))
     }
 }
