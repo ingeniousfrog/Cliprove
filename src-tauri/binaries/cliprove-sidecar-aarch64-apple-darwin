@@ -4,8 +4,20 @@ set -euo pipefail
 # Development stub for Tauri externalBin resolution.
 # Release builds replace this file via scripts/build-sidecar.sh (PyInstaller).
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+find_project_root() {
+  local dir
+  dir="$(cd "$(dirname "$0")" && pwd)"
+  while [[ "$dir" != "/" ]]; do
+    if [[ -f "$dir/sidecar/app.py" ]]; then
+      printf '%s\n' "$dir"
+      return 0
+    fi
+    dir="$(dirname "$dir")"
+  done
+  return 1
+}
+
+ROOT="$(find_project_root)"
 PYTHON="$ROOT/sidecar/.venv/bin/python3"
 
 if [[ ! -x "$PYTHON" ]]; then

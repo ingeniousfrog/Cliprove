@@ -212,6 +212,23 @@ export interface AuthStatus {
   message?: string;
 }
 
+export type PlatformLoginStatus =
+  | "pending"
+  | "scanned"
+  | "confirmed"
+  | "completed"
+  | "failed"
+  | "expired";
+
+export interface PlatformLoginSession {
+  sessionId: string;
+  platform: Platform;
+  status: PlatformLoginStatus | string;
+  message?: string;
+  qrImageBase64?: string;
+  cookies?: string;
+}
+
 export interface AuthenticationProfile {
   platform: Platform;
   cookies?: string;

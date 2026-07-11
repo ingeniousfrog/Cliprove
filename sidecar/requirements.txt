@@ -7,3 +7,4 @@ python-dateutil>=2.8.2
 gmssl>=3.2.2
 yt-dlp>=2025.1.0
 bilibili-api-python>=17.4.0
+playwright>=1.49.0

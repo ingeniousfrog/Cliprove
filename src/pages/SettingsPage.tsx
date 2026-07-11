@@ -11,8 +11,8 @@ import {
   startSidecar,
   updateSettings,
   validateFfmpeg,
-  validatePlatformAuth,
 } from "@/lib/tauri";
+import { PlatformAuthCard } from "@/components/PlatformAuthCard";
 import type { AppSettings } from "@/types";
 
 export function SettingsPage() {
@@ -56,14 +56,6 @@ export function SettingsPage() {
     mutationFn: startSidecar,
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ["sidecar-health"] }),
-  });
-
-  const validateDouyin = useMutation({
-    mutationFn: () => validatePlatformAuth("douyin"),
-  });
-
-  const validateBilibili = useMutation({
-    mutationFn: () => validatePlatformAuth("bilibili"),
   });
 
   const validateFfmpegMutation = useMutation({
@@ -188,55 +180,41 @@ export function SettingsPage() {
       </Card>
 
       <Card>
-        <CardHeader title="平台认证" description="凭证仅保存在本地" />
-        <CardBody className="space-y-3">
-          <Field label="抖音 Cookie">
-            <textarea
-              className="min-h-[72px] w-full rounded-md border border-slate-200 px-3 py-2 text-xs"
-              value={draft.douyinCookies}
-              onChange={(event) =>
-                updateField("douyinCookies", event.target.value)
-              }
-            />
-          </Field>
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => validateDouyin.mutate()}
-            >
-              验证抖音
-            </Button>
-            {validateDouyin.data ? (
-              <span className="text-xs text-slate-500">
-                {validateDouyin.data.message}
-              </span>
-            ) : null}
-          </div>
-
-          <Field label="Bilibili Cookie">
-            <textarea
-              className="min-h-[72px] w-full rounded-md border border-slate-200 px-3 py-2 text-xs"
-              value={draft.bilibiliCookies}
-              onChange={(event) =>
-                updateField("bilibiliCookies", event.target.value)
-              }
-            />
-          </Field>
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => validateBilibili.mutate()}
-            >
-              验证 Bilibili
-            </Button>
-            {validateBilibili.data ? (
-              <span className="text-xs text-slate-500">
-                {validateBilibili.data.message}
-              </span>
-            ) : null}
-          </div>
+        <CardHeader
+          title="平台认证"
+          description="扫码或浏览器登录，凭证仅保存在本地"
+        />
+        <CardBody className="space-y-4">
+          <PlatformAuthCard
+            platform="bilibili"
+            title="Bilibili"
+            description="公开视频通常无需登录；扫码后可下载高画质或会员内容。"
+            loginLabel="扫码登录"
+            cookieField="bilibiliCookies"
+            draft={draft}
+            onDraftChange={setDraft}
+            onSaved={(settings) => {
+              setDraft(settings);
+              queryClient.setQueryData(["settings"], settings);
+              setSaved(true);
+              setTimeout(() => setSaved(false), 2000);
+            }}
+          />
+          <PlatformAuthCard
+            platform="douyin"
+            title="抖音"
+            description="解析、搜索与下载通常需要登录。点击后会打开浏览器窗口完成登录。"
+            loginLabel="打开登录窗口"
+            cookieField="douyinCookies"
+            draft={draft}
+            onDraftChange={setDraft}
+            onSaved={(settings) => {
+              setDraft(settings);
+              queryClient.setQueryData(["settings"], settings);
+              setSaved(true);
+              setTimeout(() => setSaved(false), 2000);
+            }}
+          />
         </CardBody>
       </Card>
 

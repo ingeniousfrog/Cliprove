@@ -65,6 +65,8 @@ pub fn run() {
             commands::get_settings,
             commands::update_settings,
             commands::validate_platform_auth,
+            commands::start_platform_login,
+            commands::poll_platform_login,
             commands::start_sidecar,
             commands::sidecar_health,
         ])

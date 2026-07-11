@@ -7,6 +7,16 @@ import tempfile
 from pathlib import Path
 
 
+def cookies_dict_to_header(cookies: dict[str, str]) -> str:
+    parts: list[str] = []
+    for key, value in cookies.items():
+        key = key.strip()
+        value = (value or "").strip()
+        if key and value:
+            parts.append(f"{key}={value}")
+    return "; ".join(parts)
+
+
 def cookie_header_to_dict(cookie_header: str) -> dict[str, str]:
     cookies: dict[str, str] = {}
     for chunk in (cookie_header or "").split(";"):

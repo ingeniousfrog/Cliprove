@@ -7,8 +7,8 @@ use crate::errors::{AppError, AppResult};
 use crate::mock;
 use crate::models::{
     AppSettings, AuthStatus, Collection, DownloadOptions, DownloadSpec, DownloadTask,
-    FfmpegStatus, LibraryFilter, LibraryItem, MediaItem, ParsedMedia, SearchPage, SidecarHealth,
-    Tag,
+    FfmpegStatus, LibraryFilter, LibraryItem, MediaItem, ParsedMedia, PlatformLoginSession,
+    SearchPage, SidecarHealth, Tag,
 };
 use crate::shell;
 use crate::tasks;
@@ -388,6 +388,31 @@ pub fn validate_platform_auth(
         }
         let cookies = settings.bilibili_cookies;
         Ok(mock::validate_auth(&platform, &cookies))
+    })
+}
+
+#[tauri::command]
+pub fn start_platform_login(
+    state: State<Arc<AppState>>,
+    platform: String,
+) -> Result<PlatformLoginSession, String> {
+    run(|| {
+        if platform != "douyin" && platform != "bilibili" {
+            return Err(AppError::Message("不支持的平台".to_string()));
+        }
+        ensure_sidecar(&state, &platform)?;
+        state.sidecar.client()?.start_platform_login(&platform)
+    })
+}
+
+#[tauri::command]
+pub fn poll_platform_login(
+    state: State<Arc<AppState>>,
+    session_id: String,
+) -> Result<PlatformLoginSession, String> {
+    run(|| {
+        state.sidecar.start()?;
+        state.sidecar.client()?.poll_platform_login(&session_id)
     })
 }
 

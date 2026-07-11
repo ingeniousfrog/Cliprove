@@ -46,7 +46,7 @@ impl SidecarManager {
         }
         let child = command
             .stdout(Stdio::null())
-            .stderr(Stdio::piped())
+            .stderr(Stdio::null())
             .spawn()
             .map_err(|error| {
                 AppError::structured(
@@ -107,6 +107,24 @@ impl Drop for SidecarManager {
 }
 
 fn resolve_sidecar_launcher(port: u16) -> AppResult<(PathBuf, Vec<String>, Option<PathBuf>)> {
+    // Prefer the dev venv when present so `tauri dev` does not depend on the
+    // externalBin stub resolving paths from target/debug/.
+    if let Ok(project_root) = project_root() {
+        let venv_python = project_root.join("sidecar/.venv/bin/python3");
+        let script = project_root.join("sidecar/app.py");
+        if venv_python.exists() && script.exists() {
+            return Ok((
+                venv_python,
+                vec![
+                    script.to_string_lossy().to_string(),
+                    "--port".to_string(),
+                    port.to_string(),
+                ],
+                Some(project_root.join("sidecar")),
+            ));
+        }
+    }
+
     if let Some(binary) = bundled_sidecar_binary() {
         return Ok((
             binary,

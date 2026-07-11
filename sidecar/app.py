@@ -16,6 +16,9 @@ except ImportError as exc:  # pragma: no cover
     ) from exc
 
 from jobs import Job, JobManager
+from platform_login.sessions import auth_session_manager
+from platform_login.bilibili_qr import poll_bilibili_qr_login, start_bilibili_qr_login
+from platform_login.douyin_browser import start_douyin_browser_login
 from platforms.bilibili.service import bilibili_service
 from platforms.douyin.service import douyin_service
 
@@ -170,6 +173,40 @@ async def search_media(request: SearchRequest) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/v1/auth/login/start")
+async def start_platform_login(request: AuthRequest) -> dict[str, Any]:
+    platform = request.platform
+    if platform not in {"douyin", "bilibili"}:
+        raise HTTPException(status_code=400, detail="unsupported platform")
+
+    session = auth_session_manager.create(platform)
+    try:
+        if platform == "bilibili":
+            await start_bilibili_qr_login(session)
+        else:
+            start_douyin_browser_login(session)
+    except Exception as exc:  # noqa: BLE001
+        session.status = "failed"
+        session.message = str(exc)
+    return session.to_dict()
+
+
+@app.get("/v1/auth/login/{session_id}")
+async def poll_platform_login(session_id: str) -> dict[str, Any]:
+    session = auth_session_manager.get(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="login session not found")
+
+    if session.platform == "bilibili" and session.status not in {
+        "completed",
+        "failed",
+        "expired",
+    }:
+        await poll_bilibili_qr_login(session)
+
+    return session.to_dict()
 
 
 @app.post("/v1/auth/validate")

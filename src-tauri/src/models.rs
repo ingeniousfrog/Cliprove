@@ -193,6 +193,17 @@ pub struct AuthStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct PlatformLoginSession {
+    pub session_id: String,
+    pub platform: String,
+    pub status: String,
+    pub message: Option<String>,
+    pub qr_image_base64: Option<String>,
+    pub cookies: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AppSettings {
     pub download_directory: String,
     pub filename_template: String,

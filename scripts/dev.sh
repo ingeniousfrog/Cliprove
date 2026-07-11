@@ -12,6 +12,7 @@ fi
 
 sidecar/.venv/bin/pip install -r sidecar/requirements.txt
 sidecar/.venv/bin/pip install -r engines/douyin-downloader/requirements.txt
+sidecar/.venv/bin/python -m playwright install chromium
 
 npm install
 npm run tauri dev

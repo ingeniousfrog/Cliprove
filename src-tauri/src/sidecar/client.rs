@@ -6,8 +6,8 @@ use serde_json::Value;
 
 use crate::errors::{AppError, AppResult};
 use crate::models::{
-    AppSettings, AuthStatus, DownloadOptions, MediaItem, ParsedMedia, SearchPage, SearchQuery,
-    SidecarHealth,
+    AppSettings, AuthStatus, DownloadOptions, MediaItem, ParsedMedia, PlatformLoginSession,
+    SearchPage, SearchQuery, SidecarHealth,
 };
 
 #[derive(Clone)]
@@ -99,6 +99,19 @@ impl SidecarClient {
             "proxy": ""
         });
         self.post("/v1/auth/validate", &body)
+    }
+
+    pub fn start_platform_login(&self, platform: &str) -> AppResult<PlatformLoginSession> {
+        let body = serde_json::json!({
+            "platform": platform,
+            "cookies": "",
+            "proxy": ""
+        });
+        self.post("/v1/auth/login/start", &body)
+    }
+
+    pub fn poll_platform_login(&self, session_id: &str) -> AppResult<PlatformLoginSession> {
+        self.get(&format!("/v1/auth/login/{session_id}"))
     }
 
     fn get<T: DeserializeOwned>(&self, path: &str) -> AppResult<T> {

@@ -12,6 +12,7 @@ import type {
   MediaItem,
   ParsedMedia,
   Platform,
+  PlatformLoginSession,
   SearchPage,
   SearchQuery,
   SidecarHealth,
@@ -152,6 +153,18 @@ export async function validatePlatformAuth(
   platform: Platform
 ): Promise<AuthStatus> {
   return invoke<AuthStatus>("validate_platform_auth", { platform });
+}
+
+export async function startPlatformLogin(
+  platform: Platform
+): Promise<PlatformLoginSession> {
+  return invoke<PlatformLoginSession>("start_platform_login", { platform });
+}
+
+export async function pollPlatformLogin(
+  sessionId: string
+): Promise<PlatformLoginSession> {
+  return invoke<PlatformLoginSession>("poll_platform_login", { sessionId });
 }
 
 export async function createDownloadSpec(
