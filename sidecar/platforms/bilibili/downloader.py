@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import shutil
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -31,7 +33,32 @@ def _selected_parts(asset_ids: list[str]) -> set[str]:
     return parts
 
 
-async def download_video(
+def _best_thumbnail(info: dict[str, Any]) -> str | None:
+    thumbnail = info.get("thumbnail")
+    if isinstance(thumbnail, str) and thumbnail:
+        return thumbnail
+
+    thumbnails = info.get("thumbnails") or []
+    if thumbnails:
+        for entry in reversed(thumbnails):
+            if isinstance(entry, dict):
+                url = entry.get("url")
+                if isinstance(url, str) and url:
+                    return url
+    return None
+
+
+def _fetch_thumbnail(url: str, dest: Path) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    request = urllib.request.Request(
+        url,
+        headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"},
+    )
+    with urllib.request.urlopen(request, timeout=60) as response:
+        dest.write_bytes(response.read())
+
+
+def _download_video_sync(
     *,
     canonical_url: str,
     output_dir: str,
@@ -60,7 +87,7 @@ async def download_video(
         "writesubtitles": save_subtitles,
         "writeautomaticsub": save_subtitles,
         "subtitleslangs": ["zh-Hans", "zh-CN", "zh", "en"],
-        "writethumbnail": save_cover,
+        "writethumbnail": save_cover and save_video,
         "embedthumbnail": False,
         "skip_download": not save_video,
     }
@@ -97,6 +124,14 @@ async def download_video(
         elif save_video:
             ydl.download([canonical_url])
 
+        if save_cover and not save_video:
+            thumb_url = _best_thumbnail(info)
+            if not thumb_url:
+                raise RuntimeError("无法获取封面地址")
+            cover_file = output_path / "cover.jpg"
+            _fetch_thumbnail(thumb_url, cover_file)
+            cover_path = str(cover_file)
+
         if save_metadata:
             metadata_path = str(output_path / "metadata.json")
             Path(metadata_path).write_text(
@@ -120,7 +155,8 @@ async def download_video(
         thumb = output_path / "cover.jpg"
         for path in output_path.iterdir():
             if path.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}:
-                path.rename(thumb)
+                if path != thumb:
+                    path.rename(thumb)
                 cover_path = str(thumb)
                 break
 
@@ -134,6 +170,9 @@ async def download_video(
     if save_video and not media_paths:
         raise RuntimeError("视频下载失败，请检查 Cookie 或 FFmpeg 配置")
 
+    if save_cover and cover_path is None:
+        raise RuntimeError("封面下载失败，请检查网络或 Cookie")
+
     return {
         "outputDir": str(output_path),
         "mediaPaths": media_paths,
@@ -142,3 +181,23 @@ async def download_video(
         "subtitlePaths": subtitle_paths,
         "fileSize": file_size,
     }
+
+
+async def download_video(
+    *,
+    canonical_url: str,
+    output_dir: str,
+    asset_ids: list[str],
+    cookies: str = "",
+    ffmpeg_path: str = "ffmpeg",
+    quality_id: str | None = None,
+) -> dict[str, Any]:
+    return await asyncio.to_thread(
+        _download_video_sync,
+        canonical_url=canonical_url,
+        output_dir=output_dir,
+        asset_ids=asset_ids,
+        cookies=cookies,
+        ffmpeg_path=ffmpeg_path,
+        quality_id=quality_id,
+    )

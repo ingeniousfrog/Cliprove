@@ -74,3 +74,9 @@ export function statusLabel(status: string): string {
   };
   return map[status] ?? status;
 }
+
+export function formatInvokeError(error: unknown): string {
+  if (typeof error === "string" && error.trim()) return error;
+  if (error instanceof Error && error.message.trim()) return error.message;
+  return "操作失败，请稍后重试";
+}

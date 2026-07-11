@@ -89,8 +89,12 @@ fn merge_settings(mut base: AppSettings, partial: &AppSettings) -> AppSettings {
     if !partial.ffmpeg_path.is_empty() {
         base.ffmpeg_path = partial.ffmpeg_path.clone();
     }
-    base.douyin_cookies = partial.douyin_cookies.clone();
-    base.bilibili_cookies = partial.bilibili_cookies.clone();
+    if !partial.douyin_cookies.is_empty() {
+        base.douyin_cookies = partial.douyin_cookies.clone();
+    }
+    if !partial.bilibili_cookies.is_empty() {
+        base.bilibili_cookies = partial.bilibili_cookies.clone();
+    }
     base.save_metadata = partial.save_metadata;
     base.save_cover = partial.save_cover;
     base.save_audio = partial.save_audio;

@@ -141,6 +141,7 @@ pub fn task_action(
     run(|| {
         match action.as_str() {
             "cancel" => state.db.tasks().mark_cancelled(&task_id)?,
+            "delete" => state.db.tasks().delete(&task_id)?,
             "retry" | "resume" => {
                 let payload = state
                     .db
@@ -411,7 +412,7 @@ pub fn poll_platform_login(
     session_id: String,
 ) -> Result<PlatformLoginSession, String> {
     run(|| {
-        state.sidecar.start()?;
+        ensure_sidecar(&state, "douyin")?;
         state.sidecar.client()?.poll_platform_login(&session_id)
     })
 }

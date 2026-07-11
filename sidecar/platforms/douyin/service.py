@@ -112,11 +112,19 @@ class DouyinService:
             next_cursor = str(page.get("max_cursor") or (offset + len(items)))
 
             if not items and offset == 0:
-                status_code = int(page.get("status_code") or 0)
-                if status_code in (2483,):
-                    raise ValueError("需要登录或 Cookie 已失效")
+                raw = page.get("raw") if isinstance(page.get("raw"), dict) else {}
+                status_code = int(page.get("status_code") or raw.get("status_code") or 0)
+                status_msg = str(raw.get("status_msg") or "").strip()
+                if status_code in (2483,) or "请先登录" in status_msg:
+                    raise ValueError("需要登录或 Cookie 已失效，请在设置中更新抖音 Cookie")
                 if not cookie_map:
-                    raise ValueError("搜索需要配置抖音 Cookie")
+                    raise ValueError("搜索需要配置抖音 Cookie，请先在设置中完成登录")
+                detail = status_msg or "平台未返回搜索结果"
+                raise ValueError(
+                    "搜索未返回结果。"
+                    f"{detail}。"
+                    "请在设置中点击「重新登录」，完成登录后等待首页加载完成再重试"
+                )
 
             return {
                 "items": items,
@@ -167,18 +175,45 @@ class DouyinService:
                     "message": f"验证失败: {exc}",
                 }
 
+            nickname = None
             if info:
-                nickname = (info.get("nickname") or info.get("name") or "已登录用户")
+                nickname = info.get("nickname") or info.get("name") or "已登录用户"
+
+            try:
+                probe = await api_client.search_aweme("美食", count=3)
+            except LoginRequiredError:
+                return {
+                    "platform": "douyin",
+                    "valid": False,
+                    "message": "Cookie 已失效，请重新登录",
+                }
+            except Exception as exc:  # noqa: BLE001
+                return {
+                    "platform": "douyin",
+                    "valid": False,
+                    "message": f"搜索接口验证失败: {exc}",
+                }
+
+            items = probe.get("items") or []
+            if items:
+                label = nickname or "已登录用户"
                 return {
                     "platform": "douyin",
                     "valid": True,
-                    "message": f"Cookie 有效（{nickname}）",
+                    "message": f"Cookie 有效（{label}），搜索可用",
                 }
 
+            raw = probe.get("raw") if isinstance(probe.get("raw"), dict) else {}
+            status_msg = str(raw.get("status_msg") or "").strip()
+            detail = status_msg or "搜索接口未返回结果"
+            label = nickname or "已登录用户"
             return {
                 "platform": "douyin",
-                "valid": True,
-                "message": "Cookie 格式有效（未能读取账号昵称）",
+                "valid": False,
+                "message": (
+                    f"已登录（{label}），但搜索凭证不完整：{detail}。"
+                    "请点击「重新登录」，在浏览器完成登录后等待首页加载完成"
+                ),
             }
 
 

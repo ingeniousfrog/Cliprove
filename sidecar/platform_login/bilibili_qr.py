@@ -14,12 +14,16 @@ from .sessions import AuthLoginSession
 
 def _credential_to_cookie_header(credential: Credential) -> str:
     cookies = credential.get_cookies()
+    known = {"SESSDATA", "bili_jct", "buvid3", "buvid4", "sessdata"}
     picked = {
         key: value
         for key, value in cookies.items()
-        if key in {"SESSDATA", "bili_jct", "buvid3", "buvid4"} and value
+        if value and (key in known or key.lower() in {name.lower() for name in known})
     }
-    return cookies_dict_to_header(picked)
+    header = cookies_dict_to_header(picked)
+    if not header:
+        raise ValueError("登录成功但未获取到有效 Cookie")
+    return header
 
 
 async def start_bilibili_qr_login(session: AuthLoginSession) -> None:
@@ -66,8 +70,13 @@ async def poll_bilibili_qr_login(session: AuthLoginSession) -> None:
         return
 
     if event == QrCodeLoginEvents.DONE:
-        credential = qr.get_credential()
-        session.cookies = _credential_to_cookie_header(credential)
+        try:
+            credential = qr.get_credential()
+            session.cookies = _credential_to_cookie_header(credential)
+        except Exception as exc:  # noqa: BLE001
+            session.status = "failed"
+            session.message = f"B 站登录失败: {exc}"
+            return
         session.status = "completed"
         session.message = "B 站登录成功"
         session.qr_image_base64 = None

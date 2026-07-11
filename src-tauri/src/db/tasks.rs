@@ -188,6 +188,14 @@ impl<'a> TaskRepository<'a> {
         Ok(())
     }
 
+    pub fn delete(&self, id: &str) -> AppResult<()> {
+        let conn = self.conn.lock().map_err(|_| {
+            AppError::Message("database lock poisoned".to_string())
+        })?;
+        conn.execute("DELETE FROM download_tasks WHERE id = ?1", [id])?;
+        Ok(())
+    }
+
     pub fn get_payload(&self, id: &str) -> AppResult<Option<TaskPayload>> {
         let conn = self.conn.lock().map_err(|_| {
             AppError::Message("database lock poisoned".to_string())

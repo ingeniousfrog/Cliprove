@@ -203,7 +203,7 @@ export function SettingsPage() {
           <PlatformAuthCard
             platform="douyin"
             title="抖音"
-            description="解析、搜索与下载通常需要登录。点击后会打开浏览器窗口完成登录。"
+            description="解析、搜索与下载通常需要登录。已登录后无需重复操作；更换账号可点重新登录。"
             loginLabel="打开登录窗口"
             cookieField="douyinCookies"
             draft={draft}

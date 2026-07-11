@@ -4,7 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { TaskActionButtons } from "@/components/tasks/TaskActionButtons";
 import { detectAdapter } from "@/adapters";
+import { useTaskActions } from "@/hooks/useTaskActions";
 import { enqueueDownload, getSettings, listTasks, parseLink } from "@/lib/tauri";
 import { useAppStore } from "@/stores/app";
 import {
@@ -21,6 +23,8 @@ export function HomePage() {
   const [selectedQuality, setSelectedQuality] = useState<string>("best");
   const queryClient = useQueryClient();
   const { parsedMedia, setParsedMedia } = useAppStore();
+  const { pendingAction, runAction } = useTaskActions();
+  const [pasting, setPasting] = useState(false);
 
   const detected = url.trim() ? detectAdapter(url.trim()) : undefined;
 
@@ -63,8 +67,15 @@ export function HomePage() {
   });
 
   const pasteFromClipboard = async () => {
-    const text = await navigator.clipboard.readText();
-    if (text.trim()) setUrl(text.trim());
+    setPasting(true);
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text.trim()) setUrl(text.trim());
+    } catch {
+      // Clipboard permission may be denied; ignore silently.
+    } finally {
+      setPasting(false);
+    }
   };
 
   useEffect(() => {
@@ -122,12 +133,18 @@ export function HomePage() {
               )}
             </div>
             <div className="flex gap-2">
-              <Button variant="secondary" size="sm" onClick={pasteFromClipboard}>
-                从剪贴板粘贴
+              <Button
+                variant="secondary"
+                size="sm"
+                loading={pasting}
+                onClick={pasteFromClipboard}
+              >
+                {pasting ? "粘贴中…" : "从剪贴板粘贴"}
               </Button>
               <Button
+                loading={parseMutation.isPending}
                 onClick={() => parseMutation.mutate()}
-                disabled={!url.trim() || parseMutation.isPending}
+                disabled={!url.trim()}
               >
                 {parseMutation.isPending ? "解析中…" : "解析链接"}
               </Button>
@@ -184,7 +201,7 @@ export function HomePage() {
                       key={asset.id}
                       type="button"
                       onClick={() => toggleAsset(asset.id)}
-                      className={`rounded-md border px-3 py-1.5 text-xs ${
+                      className={`rounded-md border px-3 py-1.5 text-xs transition-all duration-100 active:scale-[0.98] ${
                         active
                           ? "border-slate-900 bg-slate-900 text-white"
                           : "border-slate-200 bg-white text-slate-600"
@@ -216,10 +233,9 @@ export function HomePage() {
 
             <div className="flex justify-end">
               <Button
+                loading={downloadMutation.isPending}
                 onClick={() => downloadMutation.mutate()}
-                disabled={
-                  selectedAssets.length === 0 || downloadMutation.isPending
-                }
+                disabled={selectedAssets.length === 0}
               >
                 {downloadMutation.isPending ? "加入队列…" : "开始下载"}
               </Button>
@@ -238,25 +254,34 @@ export function HomePage() {
               {recentTasks.slice(0, 5).map((task) => (
                 <div
                   key={task.id}
-                  className="flex items-center justify-between rounded-md border border-slate-100 px-3 py-2 text-sm"
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-100 px-3 py-2 text-sm"
                 >
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="truncate font-medium">{task.title}</div>
                     <div className="text-xs text-slate-500">
                       {platformLabel(task.platform)}
                     </div>
                   </div>
-                  <Badge
-                    tone={
-                      task.status === "completed"
-                        ? "success"
-                        : task.status === "failed"
-                          ? "danger"
-                          : "default"
-                    }
-                  >
-                    {statusLabel(task.status)}
-                  </Badge>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge
+                      tone={
+                        task.status === "completed"
+                          ? "success"
+                          : task.status === "failed"
+                            ? "danger"
+                            : task.status === "interrupted"
+                              ? "warning"
+                              : "default"
+                      }
+                    >
+                      {statusLabel(task.status)}
+                    </Badge>
+                    <TaskActionButtons
+                      task={task}
+                      pendingAction={pendingAction}
+                      onAction={runAction}
+                    />
+                  </div>
                 </div>
               ))}
             </div>

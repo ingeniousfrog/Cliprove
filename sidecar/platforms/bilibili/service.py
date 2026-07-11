@@ -88,27 +88,12 @@ class BilibiliService:
         page_size = max(1, min(page_size, 50))
         order = _parse_filter_order(filters)
 
-        credential = None
-        cookie_map = cookie_header_to_dict(cookies)
-        if cookie_map:
-            try:
-                from bilibili_api import Credential
-
-                credential = Credential(
-                    sessdata=cookie_map.get("SESSDATA"),
-                    bili_jct=cookie_map.get("bili_jct"),
-                    buvid3=cookie_map.get("buvid3"),
-                )
-            except Exception:  # noqa: BLE001
-                credential = None
-
         result = await search.search_by_type(
             keyword,
             SearchObjectType.VIDEO,
             page=page,
             order_type=order,
             page_size=page_size,
-            credential=credential,
         )
 
         raw_items = result.get("result") or []
@@ -120,6 +105,9 @@ class BilibiliService:
 
         num_pages = int(result.get("numPages") or page)
         has_more = page < num_pages
+
+        if not items and page == 1:
+            raise ValueError("未找到相关结果，请尝试更换关键词或调整筛选条件")
 
         return {
             "items": items,

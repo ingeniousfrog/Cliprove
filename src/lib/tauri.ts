@@ -45,7 +45,7 @@ export async function listTasks(): Promise<DownloadTask[]> {
 
 export async function taskAction(
   taskId: string,
-  action: "pause" | "resume" | "retry" | "cancel"
+  action: "pause" | "resume" | "retry" | "cancel" | "delete"
 ): Promise<void> {
   return invoke("task_action", { taskId, action });
 }

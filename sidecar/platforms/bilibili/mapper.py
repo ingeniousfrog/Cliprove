@@ -126,6 +126,28 @@ def info_to_parsed_media(info: dict[str, Any], original_url: str) -> dict[str, A
     }
 
 
+def _parse_duration(value: Any) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return int(value)
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.isdigit():
+        return int(text)
+    if ":" in text:
+        parts = text.split(":")
+        try:
+            if len(parts) == 2:
+                return int(parts[0]) * 60 + int(parts[1])
+            if len(parts) == 3:
+                return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+        except ValueError:
+            return None
+    return None
+
+
 def search_result_to_media_item(
     result: dict[str, Any],
     *,
@@ -146,8 +168,7 @@ def search_result_to_media_item(
         author_name = str(author or "未知 UP 主")
         author_id = str(result.get("mid") or "unknown")
 
-    duration = result.get("duration")
-    duration_sec = int(duration) if duration else None
+    duration_sec = _parse_duration(result.get("duration"))
     pic = result.get("pic") or result.get("cover")
     if isinstance(pic, str) and pic.startswith("//"):
         pic = f"https:{pic}"

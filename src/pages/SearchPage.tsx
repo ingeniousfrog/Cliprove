@@ -8,8 +8,8 @@ import { Card, CardBody } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { enqueueDownload, searchMedia } from "@/lib/tauri";
-import { cn, formatDuration, platformLabel } from "@/lib/utils";
-import type { MediaItem, Platform, SearchFilterKey, SearchPage } from "@/types";
+import { cn, formatDuration, formatInvokeError, platformLabel } from "@/lib/utils";
+import type { MediaItem, Platform, SearchPage } from "@/types";
 
 type ViewMode = "grid" | "table";
 
@@ -43,11 +43,11 @@ export function SearchPage() {
   const [results, setResults] = useState<MediaItem[]>([]);
   const [cursor, setCursor] = useState<string | undefined>();
   const [hasMore, setHasMore] = useState(false);
-  const [supportedFilters, setSupportedFilters] = useState<SearchFilterKey[]>([]);
   const [sort, setSort] = useState("general");
   const [publishTime, setPublishTime] = useState("all");
   const [isSearching, setIsSearching] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const parentRef = useRef<HTMLDivElement>(null);
@@ -75,6 +75,7 @@ export function SearchPage() {
     setIsSearching(true);
     setSearchError(null);
     setSelected([]);
+    setHasSearched(true);
     try {
       const page = await runSearch();
       applyPage(page, false);
@@ -82,7 +83,7 @@ export function SearchPage() {
       setResults([]);
       setCursor(undefined);
       setHasMore(false);
-      setSearchError((error as Error).message);
+      setSearchError(formatInvokeError(error));
     } finally {
       setIsSearching(false);
     }
@@ -96,7 +97,7 @@ export function SearchPage() {
       const page = await runSearch(cursor);
       applyPage(page, true);
     } catch (error) {
-      setSearchError((error as Error).message);
+      setSearchError(formatInvokeError(error));
     } finally {
       setIsLoadingMore(false);
     }
@@ -106,7 +107,6 @@ export function SearchPage() {
     setResults((current) => (append ? [...current, ...page.items] : page.items));
     setCursor(page.cursor);
     setHasMore(page.hasMore);
-    setSupportedFilters(page.supportedFilters);
   };
 
   const batchMutation = useMutation({
@@ -165,10 +165,8 @@ export function SearchPage() {
     overscan: 6,
   });
 
-  const showDouyinFilters =
-    platform === "douyin" && supportedFilters.length > 0;
-  const showBilibiliFilters =
-    platform === "bilibili" && supportedFilters.length > 0;
+  const showDouyinFilters = platform === "douyin";
+  const showBilibiliFilters = platform === "bilibili";
 
   return (
     <div className="mx-auto flex h-full max-w-6xl flex-col gap-4 p-6">
@@ -194,6 +192,8 @@ export function SearchPage() {
                   setSelected([]);
                   setCursor(undefined);
                   setHasMore(false);
+                  setHasSearched(false);
+                  setSearchError(null);
                   setSort(next === "bilibili" ? "total" : "general");
                 }}
               >
@@ -216,8 +216,9 @@ export function SearchPage() {
               />
             </div>
             <Button
+              loading={isSearching}
               onClick={() => void handleSearch()}
-              disabled={!keyword.trim() || isSearching}
+              disabled={!keyword.trim()}
             >
               {isSearching ? "搜索中…" : "搜索"}
             </Button>
@@ -308,8 +309,28 @@ export function SearchPage() {
         className="h-[min(560px,calc(100vh-340px))] overflow-auto rounded-lg border border-slate-200 bg-white"
       >
         {results.length === 0 ? (
-          <div className="flex h-48 items-center justify-center text-sm text-slate-400">
-            {isSearching ? "搜索中…" : "输入关键词开始搜索"}
+          <div className="flex h-48 flex-col items-center justify-center gap-1 px-6 text-center text-sm text-slate-400">
+            {isSearching ? (
+              <span>搜索中…</span>
+            ) : hasSearched ? (
+              <>
+                <span>未找到相关结果</span>
+                <span className="text-xs">
+                  {platform === "douyin"
+                    ? "请确认已在设置中登录抖音，或尝试更换关键词"
+                    : "请尝试更换关键词或调整筛选条件"}
+                </span>
+              </>
+            ) : (
+              <>
+                <span>输入关键词后，点击「搜索」开始</span>
+                <span className="text-xs text-slate-300">
+                  {platform === "douyin"
+                    ? "抖音搜索需要先完成平台登录"
+                    : "支持排序筛选与批量下载"}
+                </span>
+              </>
+            )}
           </div>
         ) : viewMode === "grid" ? (
           <div

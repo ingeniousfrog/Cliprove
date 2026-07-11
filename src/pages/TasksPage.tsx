@@ -1,10 +1,11 @@
 import { useEffect } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listen } from "@tauri-apps/api/event";
-import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { listTasks, taskAction } from "@/lib/tauri";
+import { TaskActionButtons } from "@/components/tasks/TaskActionButtons";
+import { useTaskActions } from "@/hooks/useTaskActions";
+import { listTasks } from "@/lib/tauri";
 import {
   formatDate,
   formatSpeed,
@@ -15,11 +16,18 @@ import type { DownloadProgress } from "@/types";
 
 export function TasksPage() {
   const queryClient = useQueryClient();
+  const { pendingAction, runAction } = useTaskActions();
 
   const { data: tasks = [], isLoading } = useQuery({
     queryKey: ["tasks"],
     queryFn: listTasks,
-    refetchInterval: 5000,
+    refetchInterval: (query) => {
+      const items = query.state.data ?? [];
+      const hasActive = items.some((task) =>
+        ["queued", "parsing", "downloading", "post_processing"].includes(task.status)
+      );
+      return hasActive ? 1000 : 5000;
+    },
   });
 
   useEffect(() => {
@@ -31,17 +39,6 @@ export function TasksPage() {
     };
   }, [queryClient]);
 
-  const actionMutation = useMutation({
-    mutationFn: ({
-      taskId,
-      action,
-    }: {
-      taskId: string;
-      action: "pause" | "resume" | "retry" | "cancel";
-    }) => taskAction(taskId, action),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tasks"] }),
-  });
-
   const interruptedTasks = tasks.filter((task) => task.status === "interrupted");
 
   return (
@@ -49,7 +46,7 @@ export function TasksPage() {
       <div>
         <h1 className="text-xl font-semibold">任务中心</h1>
         <p className="mt-1 text-sm text-slate-500">
-          查看排队、进行中、已完成与失败任务；支持恢复上次中断的下载。
+          查看排队、进行中、已完成与失败任务；支持恢复、取消或删除。
         </p>
       </div>
 
@@ -63,22 +60,19 @@ export function TasksPage() {
             {interruptedTasks.map((task) => (
               <div
                 key={task.id}
-                className="flex items-center justify-between rounded-lg border border-amber-100 bg-amber-50 px-3 py-2"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-100 bg-amber-50 px-3 py-2"
               >
-                <div>
+                <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium">{task.title}</p>
                   <p className="text-xs text-amber-700">
                     {platformLabel(task.platform)} · {task.stage}
                   </p>
                 </div>
-                <Button
-                  size="sm"
-                  onClick={() =>
-                    actionMutation.mutate({ taskId: task.id, action: "resume" })
-                  }
-                >
-                  恢复下载
-                </Button>
+                <TaskActionButtons
+                  task={task}
+                  pendingAction={pendingAction}
+                  onAction={runAction}
+                />
               </div>
             ))}
           </CardBody>
@@ -137,50 +131,11 @@ export function TasksPage() {
                       {formatDate(task.updatedAt)}
                     </td>
                     <td className="px-2 py-2">
-                      <div className="flex gap-1">
-                        {task.status === "interrupted" ? (
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() =>
-                              actionMutation.mutate({
-                                taskId: task.id,
-                                action: "resume",
-                              })
-                            }
-                          >
-                            恢复
-                          </Button>
-                        ) : null}
-                        {task.status === "failed" ? (
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() =>
-                              actionMutation.mutate({
-                                taskId: task.id,
-                                action: "retry",
-                              })
-                            }
-                          >
-                            重试
-                          </Button>
-                        ) : null}
-                        {["queued", "downloading"].includes(task.status) ? (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() =>
-                              actionMutation.mutate({
-                                taskId: task.id,
-                                action: "cancel",
-                              })
-                            }
-                          >
-                            取消
-                          </Button>
-                        ) : null}
-                      </div>
+                      <TaskActionButtons
+                        task={task}
+                        pendingAction={pendingAction}
+                        onAction={runAction}
+                      />
                       {task.error ? (
                         <div className="mt-1 text-xs text-red-600">
                           {task.error.message}

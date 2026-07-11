@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 
-pub use client::SidecarClient;
+pub use client::{SidecarClient, SidecarJob};
 
 use crate::errors::{AppError, AppResult};
 use crate::models::SidecarHealth;
@@ -85,7 +85,7 @@ impl SidecarManager {
     }
 
     pub fn health(&self) -> AppResult<SidecarHealth> {
-        self.client()?.health()
+        SidecarClient::with_timeout(self.port, std::time::Duration::from_secs(5))?.health()
     }
 
     pub fn stop(&self) -> AppResult<()> {

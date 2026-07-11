@@ -186,6 +186,7 @@ async def start_platform_login(request: AuthRequest) -> dict[str, Any]:
         if platform == "bilibili":
             await start_bilibili_qr_login(session)
         else:
+            session.message = "正在启动浏览器登录窗口…"
             start_douyin_browser_login(session)
     except Exception as exc:  # noqa: BLE001
         session.status = "failed"

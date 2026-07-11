@@ -1,13 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
+  getSettings,
   pollPlatformLogin,
   startPlatformLogin,
   updateSettings,
   validatePlatformAuth,
 } from "@/lib/tauri";
+import { formatInvokeError } from "@/lib/utils";
 import type { AppSettings, Platform, PlatformLoginSession } from "@/types";
 
 interface PlatformAuthCardProps {
@@ -38,9 +40,14 @@ export function PlatformAuthCard({
     null
   );
   const [loginMessage, setLoginMessage] = useState<string | null>(null);
+  const [configured, setConfigured] = useState(false);
+  const savingRef = useRef(false);
 
   const validateMutation = useMutation({
     mutationFn: () => validatePlatformAuth(platform),
+    onSuccess: (status) => {
+      setConfigured(status.valid || Boolean(draft[cookieField].trim()));
+    },
   });
 
   const startLoginMutation = useMutation({
@@ -50,20 +57,32 @@ export function PlatformAuthCard({
       setLoginMessage(session.message ?? null);
     },
     onError: (error) => {
-      setLoginMessage((error as Error).message);
+      setLoginMessage(formatInvokeError(error));
     },
   });
 
   const saveCookiesMutation = useMutation({
-    mutationFn: (cookies: string) =>
-      updateSettings({ [cookieField]: cookies } as Partial<AppSettings>),
+    mutationFn: async (cookies: string) => {
+      const current = await getSettings();
+      return updateSettings({ ...current, [cookieField]: cookies });
+    },
     onSuccess: (settings) => {
+      savingRef.current = false;
       onDraftChange(settings);
       onSaved(settings);
+      setConfigured(true);
       setLoginMessage("登录成功，凭证已自动保存");
       validateMutation.mutate();
     },
+    onError: (error) => {
+      savingRef.current = false;
+      setLoginMessage(`保存凭证失败：${formatInvokeError(error)}`);
+    },
   });
+
+  useEffect(() => {
+    setConfigured(Boolean(draft[cookieField].trim()));
+  }, [cookieField, draft]);
 
   useEffect(() => {
     if (!loginSession || TERMINAL_STATUSES.has(loginSession.status)) {
@@ -82,8 +101,13 @@ export function PlatformAuthCard({
           setLoginSession(next);
           setLoginMessage(next.message ?? null);
 
-          if (next.status === "completed" && next.cookies) {
-            saveCookiesMutation.mutate(next.cookies);
+          if (next.status === "completed") {
+            if (next.cookies && !savingRef.current) {
+              savingRef.current = true;
+              saveCookiesMutation.mutate(next.cookies);
+            } else if (!next.cookies) {
+              setLoginMessage("登录成功，但未获取到凭证，请重试");
+            }
             break;
           }
           if (TERMINAL_STATUSES.has(next.status)) {
@@ -91,7 +115,7 @@ export function PlatformAuthCard({
           }
         } catch (error) {
           if (!cancelled) {
-            setLoginMessage((error as Error).message);
+            setLoginMessage(formatInvokeError(error));
           }
           break;
         }
@@ -103,11 +127,20 @@ export function PlatformAuthCard({
     return () => {
       cancelled = true;
     };
-  }, [loginSession?.sessionId, saveCookiesMutation]);
+  }, [loginSession?.sessionId]);
 
-  const hasCookies = Boolean(draft[cookieField].trim());
   const isLoginActive =
     loginSession !== null && !TERMINAL_STATUSES.has(loginSession.status);
+
+  const handleStartLogin = () => {
+    setLoginSession(null);
+    setLoginMessage(
+      platform === "douyin"
+        ? "正在启动浏览器登录窗口…"
+        : "正在准备登录…"
+    );
+    startLoginMutation.mutate();
+  };
 
   return (
     <div className="space-y-3 rounded-md border border-slate-100 p-3">
@@ -116,24 +149,30 @@ export function PlatformAuthCard({
           <div className="text-sm font-medium text-slate-800">{title}</div>
           <p className="mt-1 text-xs text-slate-500">{description}</p>
         </div>
-        <Badge tone={hasCookies ? "success" : "default"}>
-          {hasCookies ? "已配置" : "未配置"}
+        <Badge tone={configured ? "success" : "default"}>
+          {configured ? "已配置" : "未配置"}
         </Badge>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
         <Button
           size="sm"
-          onClick={() => startLoginMutation.mutate()}
-          disabled={startLoginMutation.isPending || isLoginActive}
+          loading={startLoginMutation.isPending || isLoginActive}
+          onClick={handleStartLogin}
+          disabled={isLoginActive}
         >
-          {startLoginMutation.isPending || isLoginActive ? "登录中…" : loginLabel}
+          {startLoginMutation.isPending || isLoginActive
+            ? "登录中…"
+            : platform === "douyin" && configured
+              ? "重新登录"
+              : loginLabel}
         </Button>
         <Button
           size="sm"
           variant="secondary"
+          loading={validateMutation.isPending}
           onClick={() => validateMutation.mutate()}
-          disabled={!hasCookies || validateMutation.isPending}
+          disabled={!configured}
         >
           验证登录状态
         </Button>
@@ -160,11 +199,25 @@ export function PlatformAuthCard({
       ) : null}
 
       {loginMessage && !loginSession?.qrImageBase64 ? (
-        <p className="text-xs text-slate-500">{loginMessage}</p>
+        <p
+          className={
+            validateMutation.data?.valid === false && !isLoginActive
+              ? "text-xs text-red-600"
+              : "text-xs text-slate-500"
+          }
+        >
+          {loginMessage}
+        </p>
       ) : null}
 
       {validateMutation.data ? (
-        <p className="text-xs text-slate-500">{validateMutation.data.message}</p>
+        <p
+          className={
+            validateMutation.data.valid ? "text-xs text-slate-500" : "text-xs text-red-600"
+          }
+        >
+          {validateMutation.data.message}
+        </p>
       ) : null}
 
       {showAdvanced ? (
