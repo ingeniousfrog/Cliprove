@@ -9,6 +9,7 @@ mod sidecar;
 mod tasks;
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use app_state::AppState;
 use tauri::Manager;
@@ -25,8 +26,14 @@ pub fn run() {
             database.tasks().recover_interrupted()?;
             let settings = database.settings().get_all()?;
             std::fs::create_dir_all(&settings.download_directory).ok();
-            app.manage(AppState::new(database));
+            let state = AppState::new(database);
+            let sidecar = Arc::clone(&state.sidecar);
+            app.manage(state);
             tracing::info!("Cliprove started, db at {:?}", app_data_dir);
+
+            if let Err(error) = sidecar.start() {
+                tracing::warn!("Sidecar auto-start failed: {error}");
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

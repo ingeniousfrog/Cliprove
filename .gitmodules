@@ -1,0 +1,3 @@
+[submodule "engines/douyin-downloader"]
+	path = engines/douyin-downloader
+	url = https://github.com/jiji262/douyin-downloader.git

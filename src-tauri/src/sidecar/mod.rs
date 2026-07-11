@@ -1,6 +1,10 @@
+mod client;
+
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
+
+pub use client::SidecarClient;
 
 use crate::errors::{AppError, AppResult};
 use crate::models::SidecarHealth;
@@ -20,8 +24,8 @@ impl SidecarManager {
         }
     }
 
-    pub fn port(&self) -> u16 {
-        self.port
+    pub fn client(&self) -> AppResult<SidecarClient> {
+        SidecarClient::new(self.port)
     }
 
     pub fn start(&self) -> AppResult<SidecarHealth> {
@@ -35,18 +39,22 @@ impl SidecarManager {
 
         let script = sidecar_entrypoint()?;
         let python = sidecar_python()?;
+        let project_root = project_root()?;
         let child = Command::new(python)
             .arg(script)
             .arg("--port")
             .arg(self.port.to_string())
+            .current_dir(project_root.join("sidecar"))
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stderr(Stdio::piped())
             .spawn()
             .map_err(|error| {
                 AppError::structured(
                     "engine_failure",
                     "无法启动 Python Sidecar",
-                    Some(format!("请确认已安装 Python 3 与 fastapi/uvicorn：{error}")),
+                    Some(format!(
+                        "请运行 sidecar/.venv 安装依赖：pip install -r sidecar/requirements.txt ({error})"
+                    )),
                 )
             })?;
 
@@ -57,7 +65,7 @@ impl SidecarManager {
             *guard = Some(child);
         }
 
-        for _ in 0..20 {
+        for _ in 0..30 {
             std::thread::sleep(std::time::Duration::from_millis(200));
             if let Ok(health) = self.health() {
                 if health.status == "ok" {
@@ -69,27 +77,12 @@ impl SidecarManager {
         Err(AppError::structured(
             "engine_failure",
             "Sidecar 启动超时",
-            Some("检查 sidecar/requirements.txt 是否已安装".to_string()),
+            Some("检查 sidecar/requirements.txt 与 engines/douyin-downloader submodule".to_string()),
         ))
     }
 
     pub fn health(&self) -> AppResult<SidecarHealth> {
-        let url = format!("http://127.0.0.1:{}/health", self.port);
-        let response = reqwest::blocking::Client::builder()
-            .timeout(std::time::Duration::from_secs(2))
-            .build()?
-            .get(url)
-            .send()?;
-
-        if !response.status().is_success() {
-            return Err(AppError::structured(
-                "engine_failure",
-                "Sidecar 健康检查失败",
-                None,
-            ));
-        }
-
-        Ok(response.json()?)
+        self.client()?.health()
     }
 
     pub fn stop(&self) -> AppResult<()> {
@@ -110,27 +103,23 @@ impl Drop for SidecarManager {
     }
 }
 
-fn sidecar_python() -> AppResult<PathBuf> {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let project_root = manifest_dir
+fn project_root() -> AppResult<PathBuf> {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
-        .ok_or_else(|| AppError::Message("invalid manifest dir".to_string()))?;
+        .map(PathBuf::from)
+        .ok_or_else(|| AppError::Message("invalid manifest dir".to_string()))
+}
 
-    let venv_python = project_root.join("sidecar/.venv/bin/python3");
+fn sidecar_python() -> AppResult<PathBuf> {
+    let venv_python = project_root()?.join("sidecar/.venv/bin/python3");
     if venv_python.exists() {
         return Ok(venv_python);
     }
-
     Ok(PathBuf::from("python3"))
 }
 
 fn sidecar_entrypoint() -> AppResult<PathBuf> {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let dev_path = manifest_dir
-        .parent()
-        .map(|path| path.join("sidecar/app.py"))
-        .ok_or_else(|| AppError::Message("invalid manifest dir".to_string()))?;
-
+    let dev_path = project_root()?.join("sidecar/app.py");
     if dev_path.exists() {
         return Ok(dev_path);
     }

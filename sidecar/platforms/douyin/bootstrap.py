@@ -1,0 +1,20 @@
+"""Make douyin-downloader importable from the sidecar."""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+ENGINE_ROOT = Path(__file__).resolve().parents[3] / "engines" / "douyin-downloader"
+
+
+def ensure_engine_path() -> Path:
+    engine_path = str(ENGINE_ROOT)
+    if engine_path not in sys.path:
+        sys.path.insert(0, engine_path)
+    if not ENGINE_ROOT.exists():
+        raise RuntimeError(
+            f"douyin-downloader engine not found at {ENGINE_ROOT}. "
+            "Run: git submodule update --init --recursive"
+        )
+    return ENGINE_ROOT

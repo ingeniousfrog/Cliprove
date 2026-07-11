@@ -11,9 +11,23 @@ use crate::models::{
 };
 use crate::tasks;
 
+fn is_douyin_url(url: &str) -> bool {
+    let lowered = url.to_lowercase();
+    ["douyin.com", "iesdouyin.com", "v.douyin.com"]
+        .iter()
+        .any(|token| lowered.contains(token))
+}
+
 #[tauri::command]
-pub fn parse_link(_state: State<AppState>, url: String) -> Result<ParsedMedia, String> {
-    run(|| mock::parse_link(&url))
+pub fn parse_link(state: State<AppState>, url: String) -> Result<ParsedMedia, String> {
+    run(|| {
+        if is_douyin_url(&url) {
+            let settings = state.db.settings().get_all()?;
+            state.sidecar.start()?;
+            return state.sidecar.client()?.parse_link(&url, &settings);
+        }
+        mock::parse_link(&url)
+    })
 }
 
 #[tauri::command]
@@ -53,7 +67,7 @@ pub fn enqueue_download(
             return Err(AppError::structured(
                 "content_unavailable",
                 "该内容已在本地库中",
-                Some("如需重新下载，请在后续版本启用强制覆盖".to_string()),
+                Some("如需重新下载，请使用重试并覆盖（后续将提供显式覆盖选项）".to_string()),
             ));
         }
 
@@ -70,10 +84,14 @@ pub fn enqueue_download(
             .tasks()
             .insert(&item, &options, &output_dir)?;
 
-        let db = Arc::clone(&state.db);
+        if item.platform == "douyin" {
+            state.sidecar.start()?;
+        }
+
         tasks::spawn_task(
             app,
-            db,
+            Arc::clone(&state.db),
+            Arc::clone(&state.sidecar),
             task.id.clone(),
             item,
             output_dir,
@@ -127,14 +145,22 @@ pub fn task_action(
                         cover_url: None,
                         search_keyword: None,
                     };
+                    if item.platform == "douyin" {
+                        state.sidecar.start()?;
+                    }
                     tasks::spawn_task(
                         app,
                         Arc::clone(&state.db),
+                        Arc::clone(&state.sidecar),
                         task_id,
                         item,
                         output_dir,
                         DownloadOptions {
-                            assets: vec!["video".to_string(), "cover".to_string()],
+                            assets: vec![
+                                "video".to_string(),
+                                "cover".to_string(),
+                                "metadata".to_string(),
+                            ],
                             quality_id: None,
                             save_cover: Some(true),
                             save_audio: None,
@@ -156,12 +182,7 @@ pub fn task_action(
 
 #[tauri::command]
 pub fn list_library(state: State<AppState>, query: Option<String>) -> Result<Vec<LibraryItem>, String> {
-    run(|| {
-        state
-            .db
-            .library()
-            .list(query.as_deref())
-    })
+    run(|| state.db.library().list(query.as_deref()))
 }
 
 #[tauri::command]
@@ -184,11 +205,14 @@ pub fn validate_platform_auth(
 ) -> Result<AuthStatus, String> {
     run(|| {
         let settings = state.db.settings().get_all()?;
-        let cookies = match platform.as_str() {
-            "douyin" => settings.douyin_cookies,
-            "bilibili" => settings.bilibili_cookies,
-            _ => String::new(),
-        };
+        if platform == "douyin" {
+            state.sidecar.start()?;
+            return state
+                .sidecar
+                .client()?
+                .validate_auth(&platform, &settings);
+        }
+        let cookies = settings.bilibili_cookies;
         Ok(mock::validate_auth(&platform, &cookies))
     })
 }

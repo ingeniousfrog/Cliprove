@@ -45,7 +45,7 @@ export function AppLayout() {
           ))}
         </nav>
         <div className="border-t border-slate-100 px-4 py-3 text-[11px] text-slate-400">
-          Phase 0 · Mock 模式
+          Phase 1 · 抖音引擎
         </div>
       </aside>
       <main className="min-w-0 flex-1 overflow-auto">
