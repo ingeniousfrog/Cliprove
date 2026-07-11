@@ -60,6 +60,7 @@ pub fn run() {
             commands::reveal_in_finder,
             commands::open_local_file,
             commands::read_local_file,
+            commands::validate_ffmpeg,
             commands::get_app_paths,
             commands::get_settings,
             commands::update_settings,

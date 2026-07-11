@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::path::PathBuf;
 use std::process::Command;
 
 use crate::errors::{AppError, AppResult};
@@ -46,4 +47,37 @@ pub fn read_text_file(path: &str, max_bytes: usize) -> AppResult<String> {
         )));
     }
     std::fs::read_to_string(path).map_err(|error| AppError::Message(error.to_string()))
+}
+
+pub fn validate_ffmpeg(path: &str) -> AppResult<(bool, String, Option<String>)> {
+    let trimmed = path.trim();
+    let candidates = if trimmed.is_empty() || trimmed == "ffmpeg" {
+        vec![PathBuf::from("ffmpeg")]
+    } else {
+        vec![PathBuf::from(trimmed)]
+    };
+
+    for candidate in candidates {
+        let output = match Command::new(&candidate).arg("-version").output() {
+            Ok(output) => output,
+            Err(_) => continue,
+        };
+
+        if !output.status.success() {
+            continue;
+        }
+
+        let version_line = String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .next()
+            .unwrap_or("FFmpeg")
+            .to_string();
+        return Ok((true, version_line, Some(candidate.to_string_lossy().to_string())));
+    }
+
+    Ok((
+        false,
+        "无法执行 FFmpeg，请检查路径或安装 FFmpeg".to_string(),
+        None,
+    ))
 }

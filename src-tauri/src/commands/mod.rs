@@ -7,7 +7,8 @@ use crate::errors::{AppError, AppResult};
 use crate::mock;
 use crate::models::{
     AppSettings, AuthStatus, Collection, DownloadOptions, DownloadSpec, DownloadTask,
-    LibraryFilter, LibraryItem, MediaItem, ParsedMedia, SearchPage, SidecarHealth, Tag,
+    FfmpegStatus, LibraryFilter, LibraryItem, MediaItem, ParsedMedia, SearchPage, SidecarHealth,
+    Tag,
 };
 use crate::shell;
 use crate::tasks;
@@ -331,12 +332,29 @@ pub fn read_local_file(path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+pub fn validate_ffmpeg(path: String) -> Result<FfmpegStatus, String> {
+    run(|| {
+        let (valid, message, resolved_path) = shell::validate_ffmpeg(&path)?;
+        Ok(FfmpegStatus {
+            valid,
+            message,
+            resolved_path,
+        })
+    })
+}
+
+#[tauri::command]
 pub fn get_app_paths(state: State<Arc<AppState>>) -> Result<serde_json::Value, String> {
     run(|| {
         let settings = state.db.settings().get_all()?;
+        let log_dir = dirs::data_local_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join("Cliprove")
+            .join("logs");
         Ok(serde_json::json!({
             "databasePath": state.db.path().to_string_lossy(),
             "downloadDirectory": settings.download_directory,
+            "logDirectory": log_dir.to_string_lossy(),
         }))
     })
 }

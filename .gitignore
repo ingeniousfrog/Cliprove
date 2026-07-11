@@ -26,6 +26,11 @@ dist-ssr
 # Tauri / Rust
 src-tauri/target
 
+# PyInstaller output overwrites the dev stub locally — do not commit large binaries
+# (keep src-tauri/binaries/cliprove-sidecar-aarch64-apple-darwin stub in git for dev)
+sidecar/build
+sidecar/dist
+
 # Python
 sidecar/__pycache__
 sidecar/.venv

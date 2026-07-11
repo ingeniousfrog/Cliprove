@@ -5,7 +5,14 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-ENGINE_ROOT = Path(__file__).resolve().parents[3] / "engines" / "douyin-downloader"
+
+def _engine_root() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys._MEIPASS) / "engines" / "douyin-downloader"
+    return Path(__file__).resolve().parents[3] / "engines" / "douyin-downloader"
+
+
+ENGINE_ROOT = _engine_root()
 
 
 def ensure_engine_path() -> Path:

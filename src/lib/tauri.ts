@@ -16,6 +16,7 @@ import type {
   SearchQuery,
   SidecarHealth,
   Tag,
+  FfmpegStatus,
 } from "@/types";
 
 export async function parseLink(url: string): Promise<ParsedMedia> {
@@ -127,6 +128,10 @@ export async function openLocalFile(path: string): Promise<void> {
 
 export async function readLocalFile(path: string): Promise<string> {
   return invoke<string>("read_local_file", { path });
+}
+
+export async function validateFfmpeg(path: string): Promise<FfmpegStatus> {
+  return invoke<FfmpegStatus>("validate_ffmpeg", { path });
 }
 
 export async function getAppPaths(): Promise<AppPaths> {

@@ -9,59 +9,40 @@ Local-first desktop app for searching, collecting, and managing publicly accessi
 - **Data**: SQLite (application database)
 - **Engine**: Python sidecar (FastAPI) — Douyin + Bilibili
 
-## Phase 4 status
+## Features
 
-Library management and reliability:
-
-- SQLite FTS5 full-text search (title, author, tags, IDs)
-- Filters: platform, media type, download date, tags, collections
-- Tags and collections CRUD
-- Open file / Reveal in Finder / copy source link / view metadata
-- Safe delete with optional local file removal
-- Interrupted task recovery on Tasks page
-- Clipboard link detection (optional, Settings toggle)
-- Download concurrency limiting
-
-## Phase 3 status (completed)
-
-Bilibili link parse/search/download via sidecar:
-
-- `yt-dlp` for parse/download (quality, subtitles, multi-part, FFmpeg merge)
-- `bilibili-api-python` for keyword search with sort filters
-- Cookie support for SESSDATA (high quality / member streams)
-- Home page: quality selection for Bilibili downloads
-- Search page: Bilibili sort filters + batch download with subtitles
-
-## Phase 2 status (completed)
-
-Douyin keyword search is wired to the real engine:
-
-- `/v1/search` with pagination (`cursor`) and filters (`sort`, `publish_time`)
-- Search page supports grid/table views, virtualized lists, multi-select, and batch enqueue
-- `searchKeyword` is preserved on library items discovered via search
-
-## Phase 1 status (completed)
-
-Douyin link parse/download via sidecar and `douyin-downloader` engine.
+- Douyin & Bilibili link parse, search, and download
+- Local library with FTS search, tags, and collections
+- Task queue with recovery and concurrency control
+- macOS `.dmg` packaging with bundled Python sidecar
 
 ## Prerequisites
 
 - Node.js 20+
 - Rust (stable)
-- Python 3.11+ (for sidecar)
+- Python 3.11+ (development only; bundled in release builds)
+- FFmpeg (`brew install ffmpeg`)
 
 ## Development
 
 ```bash
-# Install frontend dependencies
-npm install
-
-# Optional: sidecar dependencies
-pip install -r sidecar/requirements.txt
-
-# Run desktop app
-npm run tauri dev
+git submodule update --init --recursive
+chmod +x scripts/dev.sh
+./scripts/dev.sh
 ```
+
+See [docs/development.md](./docs/development.md) for details.
+
+## Packaging
+
+```bash
+chmod +x scripts/build.sh
+./scripts/build.sh
+```
+
+Output: `src-tauri/target/release/bundle/dmg/`
+
+See [docs/packaging.md](./docs/packaging.md) for sidecar rebuild and engine updates.
 
 ## Project layout
 
@@ -69,9 +50,13 @@ npm run tauri dev
 src/           React UI
 src-tauri/     Rust core (DB, tasks, commands)
 sidecar/       Python engine service
-engines/       Upstream engines (Phase 1+)
+engines/       Upstream engines (git submodule)
+scripts/       dev.sh, build.sh, build-sidecar.sh
+docs/          development, packaging, troubleshooting
 ```
 
 ## Documentation
 
-Phase 5 will add `docs/development.md`, packaging, and troubleshooting guides in the repository.
+- [docs/development.md](./docs/development.md) — setup and daily dev workflow
+- [docs/packaging.md](./docs/packaging.md) — PyInstaller sidecar + Tauri DMG build
+- [docs/troubleshooting.md](./docs/troubleshooting.md) — common issues

@@ -10,6 +10,7 @@ use crate::errors::{AppError, AppResult};
 use crate::models::SidecarHealth;
 
 const DEFAULT_PORT: u16 = 18765;
+const SIDECAR_BINARY_NAME: &str = "cliprove-sidecar";
 
 pub struct SidecarManager {
     port: u16,
@@ -37,14 +38,13 @@ impl SidecarManager {
 
         self.stop()?;
 
-        let script = sidecar_entrypoint()?;
-        let python = sidecar_python()?;
-        let project_root = project_root()?;
-        let child = Command::new(python)
-            .arg(script)
-            .arg("--port")
-            .arg(self.port.to_string())
-            .current_dir(project_root.join("sidecar"))
+        let (program, args, working_dir) = resolve_sidecar_launcher(self.port)?;
+        let mut command = Command::new(&program);
+        command.args(&args);
+        if let Some(dir) = working_dir {
+            command.current_dir(dir);
+        }
+        let child = command
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
             .spawn()
@@ -53,7 +53,7 @@ impl SidecarManager {
                     "engine_failure",
                     "无法启动 Python Sidecar",
                     Some(format!(
-                        "请运行 sidecar/.venv 安装依赖：pip install -r sidecar/requirements.txt ({error})"
+                        "请运行 scripts/build-sidecar.sh 或配置 sidecar/.venv ({error})"
                     )),
                 )
             })?;
@@ -77,7 +77,10 @@ impl SidecarManager {
         Err(AppError::structured(
             "engine_failure",
             "Sidecar 启动超时",
-            Some("检查 sidecar/requirements.txt 与 engines/douyin-downloader submodule".to_string()),
+            Some(
+                "检查 sidecar 依赖、engines/douyin-downloader submodule，或重新打包 sidecar"
+                    .to_string(),
+            ),
         ))
     }
 
@@ -103,6 +106,53 @@ impl Drop for SidecarManager {
     }
 }
 
+fn resolve_sidecar_launcher(port: u16) -> AppResult<(PathBuf, Vec<String>, Option<PathBuf>)> {
+    if let Some(binary) = bundled_sidecar_binary() {
+        return Ok((
+            binary,
+            vec!["--port".to_string(), port.to_string()],
+            None,
+        ));
+    }
+
+    let python = dev_sidecar_python()?;
+    let script = dev_sidecar_entrypoint()?;
+    let project_root = project_root()?;
+    Ok((
+        python,
+        vec![
+            script.to_string_lossy().to_string(),
+            "--port".to_string(),
+            port.to_string(),
+        ],
+        Some(project_root.join("sidecar")),
+    ))
+}
+
+fn bundled_sidecar_binary() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let macos_candidate = exe
+        .parent()?
+        .join(SIDECAR_BINARY_NAME);
+    if macos_candidate.exists() {
+        return Some(macos_candidate);
+    }
+
+    if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
+        let target = std::env::var("TARGET").ok();
+        if let Some(target) = target {
+            let dev_bundle = PathBuf::from(manifest_dir)
+                .join("binaries")
+                .join(format!("{SIDECAR_BINARY_NAME}-{target}"));
+            if dev_bundle.exists() {
+                return Some(dev_bundle);
+            }
+        }
+    }
+
+    None
+}
+
 fn project_root() -> AppResult<PathBuf> {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -110,7 +160,7 @@ fn project_root() -> AppResult<PathBuf> {
         .ok_or_else(|| AppError::Message("invalid manifest dir".to_string()))
 }
 
-fn sidecar_python() -> AppResult<PathBuf> {
+fn dev_sidecar_python() -> AppResult<PathBuf> {
     let venv_python = project_root()?.join("sidecar/.venv/bin/python3");
     if venv_python.exists() {
         return Ok(venv_python);
@@ -118,7 +168,7 @@ fn sidecar_python() -> AppResult<PathBuf> {
     Ok(PathBuf::from("python3"))
 }
 
-fn sidecar_entrypoint() -> AppResult<PathBuf> {
+fn dev_sidecar_entrypoint() -> AppResult<PathBuf> {
     let dev_path = project_root()?.join("sidecar/app.py");
     if dev_path.exists() {
         return Ok(dev_path);
@@ -126,7 +176,18 @@ fn sidecar_entrypoint() -> AppResult<PathBuf> {
 
     Err(AppError::structured(
         "engine_failure",
-        "未找到 sidecar/app.py",
-        Some("请在开发环境中保留 sidecar 目录".to_string()),
+        "未找到 sidecar 可执行文件或 app.py",
+        Some("开发环境请保留 sidecar 目录；发布构建请运行 scripts/build-sidecar.sh".to_string()),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dev_entrypoint_exists_in_repo() {
+        let path = dev_sidecar_entrypoint();
+        assert!(path.is_ok(), "expected sidecar/app.py in development tree");
+    }
 }

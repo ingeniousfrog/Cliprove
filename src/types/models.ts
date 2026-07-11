@@ -197,6 +197,13 @@ export interface Collection {
 export interface AppPaths {
   databasePath: string;
   downloadDirectory: string;
+  logDirectory: string;
+}
+
+export interface FfmpegStatus {
+  valid: boolean;
+  message: string;
+  resolvedPath?: string;
 }
 
 export interface AuthStatus {

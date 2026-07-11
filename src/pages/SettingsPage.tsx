@@ -10,6 +10,7 @@ import {
   sidecarHealth,
   startSidecar,
   updateSettings,
+  validateFfmpeg,
   validatePlatformAuth,
 } from "@/lib/tauri";
 import type { AppSettings } from "@/types";
@@ -63,6 +64,10 @@ export function SettingsPage() {
 
   const validateBilibili = useMutation({
     mutationFn: () => validatePlatformAuth("bilibili"),
+  });
+
+  const validateFfmpegMutation = useMutation({
+    mutationFn: () => validateFfmpeg(draft?.ffmpegPath ?? "ffmpeg"),
   });
 
   if (!draft) {
@@ -165,6 +170,20 @@ export function SettingsPage() {
               onChange={(event) => updateField("ffmpegPath", event.target.value)}
             />
           </Field>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => validateFfmpegMutation.mutate()}
+            >
+              验证 FFmpeg
+            </Button>
+            {validateFfmpegMutation.data ? (
+              <Badge tone={validateFfmpegMutation.data.valid ? "success" : "danger"}>
+                {validateFfmpegMutation.data.message}
+              </Badge>
+            ) : null}
+          </div>
         </CardBody>
       </Card>
 
@@ -253,7 +272,7 @@ export function SettingsPage() {
       </Card>
 
       <Card>
-        <CardHeader title="本地路径" description="数据库与下载目录位置" />
+        <CardHeader title="本地路径" description="数据库、下载目录与日志位置" />
         <CardBody className="space-y-2 text-xs text-slate-600">
           <div>
             <div className="text-slate-500">数据库</div>
@@ -264,6 +283,10 @@ export function SettingsPage() {
             <div className="break-all">
               {pathsQuery.data?.downloadDirectory ?? draft.downloadDirectory}
             </div>
+          </div>
+          <div>
+            <div className="text-slate-500">日志目录</div>
+            <div className="break-all">{pathsQuery.data?.logDirectory ?? "—"}</div>
           </div>
         </CardBody>
       </Card>

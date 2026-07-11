@@ -19,7 +19,7 @@ from jobs import Job, JobManager
 from platforms.bilibili.service import bilibili_service
 from platforms.douyin.service import douyin_service
 
-APP_VERSION = "0.4.0-phase3"
+APP_VERSION = "0.5.0-phase5"
 job_manager = JobManager()
 
 app = FastAPI(title="Cliprove Sidecar", version=APP_VERSION)

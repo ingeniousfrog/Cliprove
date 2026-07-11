@@ -215,6 +215,14 @@ pub struct SidecarHealth {
     pub version: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FfmpegStatus {
+    pub valid: bool,
+    pub message: String,
+    pub resolved_path: Option<String>,
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         let download_directory = dirs::download_dir()
