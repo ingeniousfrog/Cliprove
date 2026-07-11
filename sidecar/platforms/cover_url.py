@@ -13,6 +13,8 @@ def normalize_cover_url(url: str | None) -> str | None:
         return None
     if text.startswith("//"):
         return f"https:{text}"
+    if text.startswith("http://"):
+        return f"https://{text.removeprefix('http://')}"
     if not text.startswith(("http://", "https://")):
         return f"https://{text}"
     return text

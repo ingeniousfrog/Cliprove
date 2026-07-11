@@ -1,7 +1,9 @@
+import { useEffect, useState } from "react";
 import { ExternalLink, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CoverImage } from "@/components/media/CoverImage";
 import { bilibiliPlayerUrl, canEmbedPreview } from "@/lib/media";
+import { resolveMediaPreview } from "@/lib/tauri";
 import { formatDuration, platformLabel } from "@/lib/utils";
 import type { MediaItem } from "@/types";
 
@@ -11,10 +13,37 @@ interface MediaPreviewDialogProps {
 }
 
 export function MediaPreviewDialog({ item, onClose }: MediaPreviewDialogProps) {
+  const [resolvedPreviewUrl, setResolvedPreviewUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setResolvedPreviewUrl(null);
+
+    if (!item || item.platform !== "bilibili") return;
+
+    const loadPreviewUrl = async () => {
+      try {
+        const url = await resolveMediaPreview(item.platform, item.platformItemId);
+        if (!cancelled) setResolvedPreviewUrl(url);
+      } catch {
+        if (!cancelled) setResolvedPreviewUrl(null);
+      }
+    };
+
+    void loadPreviewUrl();
+    return () => {
+      cancelled = true;
+    };
+  }, [item?.platform, item?.platformItemId]);
+
   if (!item) return null;
 
+  const previewUrl = resolvedPreviewUrl ?? item.previewUrl;
   const embedUrl = canEmbedPreview(item.platform)
-    ? bilibiliPlayerUrl(item.platformItemId)
+    ? bilibiliPlayerUrl({
+        platformItemId: item.platformItemId,
+        previewUrl,
+      })
     : null;
 
   const openInBrowser = () => {
@@ -49,8 +78,9 @@ export function MediaPreviewDialog({ item, onClose }: MediaPreviewDialogProps) {
                 title={item.title}
                 src={embedUrl}
                 className="aspect-video w-full"
+                allow="autoplay; fullscreen; picture-in-picture"
                 allowFullScreen
-                referrerPolicy="no-referrer"
+                referrerPolicy="strict-origin-when-cross-origin"
               />
             </div>
           ) : (

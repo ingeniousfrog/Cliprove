@@ -83,7 +83,7 @@ def health() -> dict[str, str]:
 @app.get("/v1/proxy/image")
 def proxy_image(url: str, platform: str = "") -> Response:
     normalized = normalize_cover_url(unquote(url))
-    if not normalized or not normalized.startswith("https://"):
+    if not normalized or not normalized.startswith(("http://", "https://")):
         raise HTTPException(status_code=400, detail="invalid image url")
 
     request = urllib.request.Request(
@@ -202,6 +202,16 @@ async def search_media(request: SearchRequest) -> dict[str, Any]:
         raise
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/v1/bilibili/preview/{bvid}")
+async def resolve_bilibili_preview(bvid: str) -> dict[str, Any]:
+    try:
+        return {
+            "previewUrl": await bilibili_service.preview_url(bvid),
+        }
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 

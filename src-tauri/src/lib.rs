@@ -67,6 +67,7 @@ pub fn run() {
             commands::validate_platform_auth,
             commands::start_platform_login,
             commands::poll_platform_login,
+            commands::resolve_media_preview,
             commands::start_sidecar,
             commands::sidecar_health,
         ])

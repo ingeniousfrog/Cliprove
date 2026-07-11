@@ -1,4 +1,4 @@
-import type { Platform } from "@/types";
+import type { MediaItem, Platform } from "@/types";
 
 export const SIDECAR_PORT = 18765;
 
@@ -6,6 +6,7 @@ export function normalizeCoverUrl(url?: string | null): string | null {
   if (!url?.trim()) return null;
   const text = url.trim();
   if (text.startsWith("//")) return `https:${text}`;
+  if (text.startsWith("http://")) return `https://${text.slice("http://".length)}`;
   if (!text.startsWith("http://") && !text.startsWith("https://")) {
     return `https://${text}`;
   }
@@ -28,10 +29,18 @@ export function proxiedCoverSrc(
   return normalized;
 }
 
-export function bilibiliPlayerUrl(platformItemId: string): string {
-  return `https://player.bilibili.com/player.html?bvid=${encodeURIComponent(
-    platformItemId
-  )}&high_quality=1&autoplay=0`;
+export function bilibiliPlayerUrl(
+  item: Pick<MediaItem, "platformItemId" | "previewUrl">
+): string {
+  if (item.previewUrl) return item.previewUrl;
+  const params = new URLSearchParams({
+    isOutside: "true",
+    bvid: item.platformItemId,
+    p: "1",
+    high_quality: "1",
+    autoplay: "0",
+  });
+  return `https://player.bilibili.com/player.html?${params.toString()}`;
 }
 
 export function canEmbedPreview(platform: Platform | string): boolean {

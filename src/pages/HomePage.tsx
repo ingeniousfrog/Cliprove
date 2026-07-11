@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { listen } from "@tauri-apps/api/event";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -17,7 +18,7 @@ import {
   platformLabel,
   statusLabel,
 } from "@/lib/utils";
-import type { DownloadOptions, MediaItem } from "@/types";
+import type { DownloadOptions, DownloadProgress, MediaItem } from "@/types";
 
 export function HomePage() {
   const [url, setUrl] = useState("");
@@ -62,6 +63,13 @@ export function HomePage() {
   const { data: recentTasks = [] } = useQuery({
     queryKey: ["tasks"],
     queryFn: listTasks,
+    refetchInterval: (query) => {
+      const items = query.state.data ?? [];
+      const hasActive = items.some((task) =>
+        ["queued", "parsing", "downloading", "post_processing"].includes(task.status)
+      );
+      return hasActive ? 1000 : 5000;
+    },
   });
 
   const settingsQuery = useQuery({
@@ -80,6 +88,15 @@ export function HomePage() {
       setPasting(false);
     }
   };
+
+  useEffect(() => {
+    const unlisten = listen<DownloadProgress>("download-progress", () => {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    });
+    return () => {
+      unlisten.then((dispose) => dispose());
+    };
+  }, [queryClient]);
 
   useEffect(() => {
     if (!settingsQuery.data?.clipboardDetect) return;

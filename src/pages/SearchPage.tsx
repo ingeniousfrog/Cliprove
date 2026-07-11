@@ -15,8 +15,6 @@ import type { MediaItem, Platform, SearchPage } from "@/types";
 
 type ViewMode = "grid" | "table";
 
-const GRID_COLUMNS = 3;
-
 const DOUYIN_SORT_OPTIONS = [
   { value: "general", label: "综合排序" },
   { value: "likes", label: "最多点赞" },
@@ -153,18 +151,10 @@ export function SearchPage() {
     selected.includes(item.platformItemId)
   );
 
-  const gridRows = useMemo(() => {
-    const rows: MediaItem[][] = [];
-    for (let index = 0; index < results.length; index += GRID_COLUMNS) {
-      rows.push(results.slice(index, index + GRID_COLUMNS));
-    }
-    return rows;
-  }, [results]);
-
   const rowVirtualizer = useVirtualizer({
-    count: viewMode === "grid" ? gridRows.length : results.length,
+    count: viewMode === "table" ? results.length : 0,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => (viewMode === "grid" ? 220 : 52),
+    estimateSize: () => 52,
     overscan: 6,
   });
 
@@ -329,37 +319,23 @@ export function SearchPage() {
                 <span>输入关键词后，点击「搜索」开始</span>
                 <span className="text-xs text-slate-300">
                   {platform === "douyin"
-                    ? "抖音搜索需要先完成平台登录"
+                    ? "抖音搜索需要先完成平台登录与验证"
                     : "支持排序筛选与批量下载"}
                 </span>
               </>
             )}
           </div>
         ) : viewMode === "grid" ? (
-          <div
-            style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
-            className="relative w-full"
-          >
-            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-              const row = gridRows[virtualRow.index] ?? [];
-              return (
-                <div
-                  key={virtualRow.key}
-                  className="absolute left-0 top-0 grid w-full grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:grid-cols-3"
-                  style={{ transform: `translateY(${virtualRow.start}px)` }}
-                >
-                  {row.map((item) => (
-                    <ResultCard
-                      key={item.platformItemId}
-                      item={item}
-                      active={selected.includes(item.platformItemId)}
-                      onToggle={() => toggle(item.platformItemId)}
-                      onPreview={() => setPreviewItem(item)}
-                    />
-                  ))}
-                </div>
-              );
-            })}
+          <div className="grid w-full grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:grid-cols-3">
+            {results.map((item) => (
+              <ResultCard
+                key={item.platformItemId}
+                item={item}
+                active={selected.includes(item.platformItemId)}
+                onToggle={() => toggle(item.platformItemId)}
+                onPreview={() => setPreviewItem(item)}
+              />
+            ))}
           </div>
         ) : (
           <div

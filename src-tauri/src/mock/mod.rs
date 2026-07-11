@@ -142,6 +142,7 @@ fn mock_douyin_parsed(url: &str) -> ParsedMedia {
             media_type: "video".to_string(),
             duration_sec: Some(42),
             cover_url: Some("https://picsum.photos/seed/douyin-mock/640/360".to_string()),
+            preview_url: None,
             search_keyword: None,
         },
         assets: default_assets(true),
@@ -167,6 +168,10 @@ fn mock_bilibili_parsed(url: &str) -> ParsedMedia {
             media_type: "video".to_string(),
             duration_sec: Some(612),
             cover_url: Some("https://picsum.photos/seed/bilibili-mock/640/360".to_string()),
+            preview_url: Some(
+                "https://player.bilibili.com/player.html?isOutside=true&bvid=BV1mock12345&p=1&high_quality=1&autoplay=0"
+                    .to_string(),
+            ),
             search_keyword: None,
         },
         assets: default_assets(true),
@@ -211,6 +216,7 @@ fn mock_search_items(
                 cover_url: Some(format!(
                     "https://picsum.photos/seed/{platform}-{serial}/640/360"
                 )),
+                preview_url: None,
                 search_keyword: Some(keyword.to_string()),
             }
         })

@@ -99,6 +99,11 @@ impl SidecarClient {
         self.post("/v1/search", &body)
     }
 
+    pub fn resolve_bilibili_preview_url(&self, bvid: &str) -> AppResult<Option<String>> {
+        let response: PreviewUrlResponse = self.get(&format!("/v1/bilibili/preview/{bvid}"))?;
+        Ok(response.preview_url)
+    }
+
     pub fn validate_auth(&self, platform: &str, settings: &AppSettings) -> AppResult<AuthStatus> {
         let cookies = match platform {
             "douyin" => settings.douyin_cookies.clone(),
@@ -162,6 +167,12 @@ impl SidecarClient {
             Some("检查 Sidecar 日志、Cookie 与 FFmpeg 配置".to_string()),
         ))
     }
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PreviewUrlResponse {
+    preview_url: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]

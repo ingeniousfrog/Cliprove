@@ -59,6 +59,7 @@ export interface MediaItem {
   mediaType: MediaType;
   durationSec?: number;
   coverUrl?: string;
+  previewUrl?: string;
   searchKeyword?: string;
 }
 

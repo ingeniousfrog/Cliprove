@@ -418,6 +418,24 @@ pub fn poll_platform_login(
 }
 
 #[tauri::command]
+pub fn resolve_media_preview(
+    state: State<Arc<AppState>>,
+    platform: String,
+    platform_item_id: String,
+) -> Result<Option<String>, String> {
+    run(|| {
+        if platform == "bilibili" {
+            ensure_sidecar(&state, &platform)?;
+            return state
+                .sidecar
+                .client()?
+                .resolve_bilibili_preview_url(&platform_item_id);
+        }
+        Ok(None)
+    })
+}
+
+#[tauri::command]
 pub fn start_sidecar(state: State<Arc<AppState>>) -> Result<SidecarHealth, String> {
     run(|| state.sidecar.start())
 }

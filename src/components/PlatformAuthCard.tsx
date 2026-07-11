@@ -140,6 +140,7 @@ export function PlatformAuthCard({
     loginSession !== null && !TERMINAL_STATUSES.has(loginSession.status);
 
   const handleStartLogin = () => {
+    validateMutation.reset();
     setLoginSession(null);
     setLoginMessage(
       platform === "douyin"

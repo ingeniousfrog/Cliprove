@@ -167,6 +167,16 @@ export async function pollPlatformLogin(
   return invoke<PlatformLoginSession>("poll_platform_login", { sessionId });
 }
 
+export async function resolveMediaPreview(
+  platform: Platform,
+  platformItemId: string
+): Promise<string | null> {
+  return invoke<string | null>("resolve_media_preview", {
+    platform,
+    platformItemId,
+  });
+}
+
 export async function createDownloadSpec(
   item: MediaItem,
   options: DownloadOptions

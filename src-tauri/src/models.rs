@@ -32,6 +32,7 @@ pub struct MediaItem {
     pub media_type: String,
     pub duration_sec: Option<i64>,
     pub cover_url: Option<String>,
+    pub preview_url: Option<String>,
     pub search_keyword: Option<String>,
 }
 

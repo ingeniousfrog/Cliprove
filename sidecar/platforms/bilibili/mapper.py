@@ -3,8 +3,46 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlencode
+
+try:
+    from bilibili_api.utils.aid_bvid_transformer import bvid2aid
+except Exception:  # pragma: no cover
+    bvid2aid = None  # type: ignore[assignment]
 
 from platforms.cover_url import normalize_cover_url
+
+
+def bilibili_preview_url(
+    bvid: str,
+    *,
+    aid: int | str | None = None,
+    cid: int | str | None = None,
+) -> str | None:
+    if not bvid:
+        return None
+
+    params: dict[str, str] = {
+        "isOutside": "true",
+        "bvid": bvid,
+        "p": "1",
+        "high_quality": "1",
+        "autoplay": "0",
+    }
+    if aid:
+        params["aid"] = str(aid)
+    if cid:
+        params["cid"] = str(cid)
+    return f"https://player.bilibili.com/player.html?{urlencode(params)}"
+
+
+def _aid_from_bvid(bvid: str) -> int | None:
+    if not bvid or bvid2aid is None:
+        return None
+    try:
+        return int(bvid2aid(bvid))
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _best_thumbnail(info: dict[str, Any]) -> str | None:
@@ -26,11 +64,10 @@ def _quality_options(info: dict[str, Any]) -> list[dict[str, Any]]:
         if not height:
             continue
         height = int(height)
-        fmt_id = str(fmt.get("format_id") or height)
         label = f"{height}P"
         if height not in seen or (fmt.get("tbr") or 0) > (seen[height].get("_tbr") or 0):
             seen[height] = {
-                "id": fmt_id,
+                "id": f"{height}p",
                 "label": label,
                 "height": height,
                 "_tbr": fmt.get("tbr") or 0,
@@ -70,6 +107,8 @@ def info_to_media_item(
     search_keyword: str | None = None,
 ) -> dict[str, Any]:
     bvid = str(info.get("id") or info.get("display_id") or "")
+    aid = info.get("aid") or _aid_from_bvid(bvid)
+    cid = info.get("cid")
     webpage_url = info.get("webpage_url") or info.get("original_url") or ""
     if not webpage_url and bvid:
         webpage_url = f"https://www.bilibili.com/video/{bvid}"
@@ -93,6 +132,7 @@ def info_to_media_item(
         "mediaType": media_type,
         "durationSec": int(info.get("duration") or 0) or None,
         "coverUrl": _best_thumbnail(info),
+        "previewUrl": bilibili_preview_url(bvid, aid=aid, cid=cid),
         "searchKeyword": search_keyword,
     }
 
@@ -162,6 +202,7 @@ def search_result_to_media_item(
     bvid = str(result.get("bvid") or "")
     if not bvid:
         return None
+    aid = result.get("aid") or result.get("id") or _aid_from_bvid(bvid)
 
     author = result.get("author") or ""
     if isinstance(author, dict):
@@ -194,5 +235,6 @@ def search_result_to_media_item(
         "mediaType": "video",
         "durationSec": duration_sec,
         "coverUrl": pic,
+        "previewUrl": bilibili_preview_url(bvid, aid=aid),
         "searchKeyword": search_keyword,
     }

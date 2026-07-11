@@ -22,6 +22,7 @@ fn library_fts_search_and_delete() {
         media_type: "video".to_string(),
         duration_sec: Some(60),
         cover_url: None,
+        preview_url: None,
         search_keyword: Some("关键词".to_string()),
     };
 

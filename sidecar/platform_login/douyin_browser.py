@@ -183,7 +183,8 @@ async def _finalize_login_cookies(
     page: Any,
     observed_cookie_headers: list[str],
     observed_mstokens: list[str],
-) -> dict[str, str] | None:
+) -> tuple[dict[str, str] | None, bool]:
+    last_cookies: dict[str, str] | None = None
     for attempt in range(SEARCH_PROBE_ATTEMPTS):
         session.message = (
             f"登录成功，正在收集搜索凭证（{attempt + 1}/{SEARCH_PROBE_ATTEMPTS}）…"
@@ -195,15 +196,21 @@ async def _finalize_login_cookies(
             observed_cookie_headers,
             observed_mstokens,
         )
+        last_cookies = cookies
         if not cookies.get("sessionid"):
-            return None
+            return None, False
 
         if await _probe_search(cookies):
-            return cookies
+            return cookies, True
+
+        session.message = (
+            "已登录，但抖音搜索仍在平台验证或风控中。"
+            "如果浏览器出现答题、滑块或其他验证，请完成验证并等待搜索页加载出结果"
+        )
 
         await asyncio.sleep(3)
 
-    return cookies
+    return last_cookies, False
 
 
 async def _run_douyin_browser_login(session: AuthLoginSession) -> None:
@@ -221,6 +228,7 @@ async def _run_douyin_browser_login(session: AuthLoginSession) -> None:
     session.message = "正在打开浏览器，请完成抖音登录（可扫码）"
 
     browser = None
+    last_login_cookies: dict[str, str] | None = None
     observed_cookie_headers: list[str] = []
     observed_mstokens: list[str] = []
 
@@ -274,32 +282,43 @@ async def _run_douyin_browser_login(session: AuthLoginSession) -> None:
                 storage = await context.storage_state()
                 cookies = _cookies_from_storage(storage)
                 if cookies.get("sessionid"):
-                    cookies = await _finalize_login_cookies(
+                    cookies, search_ready = await _finalize_login_cookies(
                         session,
                         context,
                         page,
                         observed_cookie_headers,
                         observed_mstokens,
                     )
+                    last_login_cookies = cookies
                     if not cookies or not cookies.get("sessionid"):
                         session.status = "failed"
                         session.message = "登录完成但未获取到有效 Cookie，请重试"
                         return
 
-                    session.cookies = cookies_dict_to_header(cookies)
-                    session.status = "completed"
-                    if await _probe_search(cookies):
+                    if search_ready:
+                        session.cookies = cookies_dict_to_header(cookies)
+                        session.status = "completed"
                         session.message = "抖音登录成功，搜索凭证已就绪"
-                    else:
-                        session.message = (
-                            "抖音登录成功，但搜索凭证可能仍受限。"
-                            "请稍后在设置中点击「验证登录状态」重试"
-                        )
-                    await _close_browser(browser)
-                    browser = None
-                    return
+                        await _close_browser(browser)
+                        browser = None
+                        return
+
+                    session.status = "pending"
+                    session.message = (
+                        "已登录，但搜索验证尚未通过。请保持浏览器打开，"
+                        "完成可能出现的答题或滑块验证后等待搜索页加载"
+                    )
 
                 await asyncio.sleep(POLL_INTERVAL_SEC)
+
+            if last_login_cookies and last_login_cookies.get("sessionid"):
+                session.cookies = cookies_dict_to_header(last_login_cookies)
+                session.status = "completed"
+                session.message = (
+                    "抖音登录已保存，但搜索仍受平台验证限制。"
+                    "如需搜索，请重新登录并在浏览器内完成弹出的验证"
+                )
+                return
 
             session.status = "failed"
             session.message = "登录超时，请重试"

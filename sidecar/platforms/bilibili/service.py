@@ -7,13 +7,13 @@ import re
 from typing import Any
 
 import yt_dlp
-from bilibili_api import search
+from bilibili_api import search, video
 from bilibili_api.search import OrderVideo, SearchObjectType
 
 from platforms.cookies import cookie_header_to_dict, normalize_bilibili_url, write_netscape_cookie_file
 
 from .downloader import download_video
-from .mapper import info_to_parsed_media, search_result_to_media_item
+from .mapper import bilibili_preview_url, info_to_parsed_media, search_result_to_media_item
 
 
 def _is_bilibili_url(url: str) -> bool:
@@ -56,6 +56,21 @@ def _parse_filter_order(filters: dict[str, Any] | None) -> OrderVideo:
     return mapping.get(raw.lower(), OrderVideo.TOTALRANK)
 
 
+async def _resolve_preview_url(bvid: str) -> str | None:
+    if not bvid:
+        return None
+    try:
+        item = video.Video(bvid=bvid)
+        info = await item.get_info()
+        pages = info.get("pages") if isinstance(info, dict) else None
+        first_page = pages[0] if isinstance(pages, list) and pages else {}
+        cid = first_page.get("cid") if isinstance(first_page, dict) else None
+        aid = info.get("aid") if isinstance(info, dict) else None
+        return bilibili_preview_url(bvid, aid=aid, cid=cid)
+    except Exception:  # noqa: BLE001
+        return bilibili_preview_url(bvid)
+
+
 class BilibiliService:
     async def parse(self, url: str, cookies: str = "", proxy: str = "") -> dict[str, Any]:
         if not _is_bilibili_url(url):
@@ -72,7 +87,11 @@ class BilibiliService:
                 return info
 
         info = await asyncio.to_thread(extract)
-        return info_to_parsed_media(info, url.strip())
+        parsed = info_to_parsed_media(info, url.strip())
+        bvid = parsed["item"].get("platformItemId")
+        if isinstance(bvid, str):
+            parsed["item"]["previewUrl"] = await _resolve_preview_url(bvid)
+        return parsed
 
     async def search(
         self,
@@ -115,6 +134,9 @@ class BilibiliService:
             "hasMore": has_more,
             "supportedFilters": ["sort", "media_type"],
         }
+
+    async def preview_url(self, bvid: str) -> str | None:
+        return await _resolve_preview_url(bvid)
 
     async def download(
         self,
