@@ -74,5 +74,4 @@ engines/       Upstream engines (Phase 1+)
 
 ## Documentation
 
-- [GOAL.md](./GOAL.md) — product requirements
-- [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) — architecture & phases
+Phase 5 will add `docs/development.md`, packaging, and troubleshooting guides in the repository.
