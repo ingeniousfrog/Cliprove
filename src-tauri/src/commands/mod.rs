@@ -32,12 +32,22 @@ pub fn parse_link(state: State<AppState>, url: String) -> Result<ParsedMedia, St
 
 #[tauri::command]
 pub fn search_media(
-    _state: State<AppState>,
+    state: State<AppState>,
     platform: String,
     query: crate::models::SearchQuery,
     cursor: Option<String>,
 ) -> Result<SearchPage, String> {
-    run(|| mock::search(&platform, &query, cursor.as_deref()))
+    run(|| {
+        if platform == "douyin" {
+            let settings = state.db.settings().get_all()?;
+            state.sidecar.start()?;
+            return state
+                .sidecar
+                .client()?
+                .search_media(&platform, &query, cursor.as_deref(), &settings);
+        }
+        mock::search(&platform, &query, cursor.as_deref())
+    })
 }
 
 #[tauri::command]

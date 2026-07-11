@@ -13,7 +13,21 @@ from core.url_parser import URLParser  # noqa: E402
 from utils.validators import is_short_url, normalize_short_url, parse_url_type  # noqa: E402
 
 from .downloader import cookies_dict, download_aweme
-from .mapper import aweme_to_parsed_media
+from .mapper import aweme_to_media_item, aweme_to_parsed_media
+
+
+def _parse_filter_int(filters: dict[str, Any] | None, key: str, mapping: dict[str, int], default: int) -> int:
+    if not filters:
+        return default
+    raw = filters.get(key)
+    if raw is None:
+        return default
+    if isinstance(raw, int):
+        return raw
+    text = str(raw)
+    if text.isdigit():
+        return int(text)
+    return mapping.get(text, default)
 
 
 class DouyinService:
@@ -49,6 +63,67 @@ class DouyinService:
                 raise ValueError("作品不存在、已下架或当前 Cookie 无权访问")
 
             return aweme_to_parsed_media(aweme, url.strip())
+
+    async def search(
+        self,
+        keyword: str,
+        *,
+        cursor: str | None = None,
+        page_size: int = 20,
+        filters: dict[str, Any] | None = None,
+        cookies: str = "",
+        proxy: str = "",
+    ) -> dict[str, Any]:
+        cookie_map = cookies_dict(cookies)
+        offset = int(cursor) if cursor else 0
+        page_size = max(1, min(page_size, 50))
+
+        sort_type = _parse_filter_int(
+            filters,
+            "sort",
+            {"general": 0, "likes": 1, "latest": 2},
+            0,
+        )
+        publish_time = _parse_filter_int(
+            filters,
+            "publish_time",
+            {"all": 0, "day": 1, "week": 7, "half_year": 182},
+            0,
+        )
+
+        async with DouyinAPIClient(cookie_map, proxy=proxy or None) as api_client:
+            try:
+                page = await api_client.search_aweme(
+                    keyword,
+                    offset=offset,
+                    count=page_size,
+                    sort_type=sort_type,
+                    publish_time=publish_time,
+                )
+            except LoginRequiredError as exc:
+                raise ValueError("需要登录或 Cookie 已失效，请在设置中更新抖音 Cookie") from exc
+
+            items = [
+                aweme_to_media_item(aweme, search_keyword=keyword)
+                for aweme in page.get("items") or []
+                if isinstance(aweme, dict)
+            ]
+            has_more = bool(page.get("has_more"))
+            next_cursor = str(page.get("max_cursor") or (offset + len(items)))
+
+            if not items and offset == 0:
+                status_code = int(page.get("status_code") or 0)
+                if status_code in (2483,):
+                    raise ValueError("需要登录或 Cookie 已失效")
+                if not cookie_map:
+                    raise ValueError("搜索需要配置抖音 Cookie")
+
+            return {
+                "items": items,
+                "cursor": next_cursor if has_more and items else None,
+                "hasMore": has_more and bool(items),
+                "supportedFilters": ["sort", "publish_time"],
+            }
 
     async def download(
         self,

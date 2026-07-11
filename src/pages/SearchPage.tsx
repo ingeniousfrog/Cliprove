@@ -1,36 +1,114 @@
-import { useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { Grid3x3, List, Loader2 } from "lucide-react";
 import { adapters } from "@/adapters";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { enqueueDownload, searchMedia } from "@/lib/tauri";
-import { formatDuration, platformLabel } from "@/lib/utils";
-import type { MediaItem, Platform } from "@/types";
+import { cn, formatDuration, platformLabel } from "@/lib/utils";
+import type { MediaItem, Platform, SearchFilterKey, SearchPage } from "@/types";
+
+type ViewMode = "grid" | "table";
+
+const GRID_COLUMNS = 3;
+
+const DOUYIN_SORT_OPTIONS = [
+  { value: "general", label: "综合排序" },
+  { value: "likes", label: "最多点赞" },
+  { value: "latest", label: "最新发布" },
+];
+
+const DOUYIN_TIME_OPTIONS = [
+  { value: "all", label: "不限时间" },
+  { value: "day", label: "一天内" },
+  { value: "week", label: "一周内" },
+  { value: "half_year", label: "半年内" },
+];
 
 export function SearchPage() {
   const [platform, setPlatform] = useState<Platform>("douyin");
   const [keyword, setKeyword] = useState("");
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [selected, setSelected] = useState<string[]>([]);
+  const [results, setResults] = useState<MediaItem[]>([]);
+  const [cursor, setCursor] = useState<string | undefined>();
+  const [hasMore, setHasMore] = useState(false);
+  const [supportedFilters, setSupportedFilters] = useState<SearchFilterKey[]>([]);
+  const [sort, setSort] = useState("general");
+  const [publishTime, setPublishTime] = useState("all");
+  const [isSearching, setIsSearching] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const parentRef = useRef<HTMLDivElement>(null);
 
-  const adapter = useMemo(
-    () => adapters.find((item) => item.id === platform)!,
-    [platform]
+  const filters = useMemo(() => {
+    if (platform !== "douyin") return undefined;
+    return { sort, publish_time: publishTime };
+  }, [platform, sort, publishTime]);
+
+  const runSearch = useCallback(
+    async (nextCursor?: string) => {
+      const page = await searchMedia(
+        platform,
+        { keyword: keyword.trim(), pageSize: 24, filters },
+        nextCursor
+      );
+      return page;
+    },
+    [platform, keyword, filters]
   );
 
-  const searchQuery = useQuery({
-    queryKey: ["search", platform, keyword],
-    queryFn: () => searchMedia(platform, { keyword, pageSize: 20 }),
-    enabled: false,
-  });
+  const handleSearch = async () => {
+    if (!keyword.trim()) return;
+    setIsSearching(true);
+    setSearchError(null);
+    setSelected([]);
+    try {
+      const page = await runSearch();
+      applyPage(page, false);
+    } catch (error) {
+      setResults([]);
+      setCursor(undefined);
+      setHasMore(false);
+      setSearchError((error as Error).message);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleLoadMore = async () => {
+    if (!cursor || isLoadingMore) return;
+    setIsLoadingMore(true);
+    setSearchError(null);
+    try {
+      const page = await runSearch(cursor);
+      applyPage(page, true);
+    } catch (error) {
+      setSearchError((error as Error).message);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
+
+  const applyPage = (page: SearchPage, append: boolean) => {
+    setResults((current) => (append ? [...current, ...page.items] : page.items));
+    setCursor(page.cursor);
+    setHasMore(page.hasMore);
+    setSupportedFilters(page.supportedFilters);
+  };
 
   const batchMutation = useMutation({
     mutationFn: async (items: MediaItem[]) => {
       for (const item of items) {
         await enqueueDownload(item, {
-          assets: ["video", "cover", "metadata"],
+          assets:
+            item.mediaType === "image_post"
+              ? ["images", "cover", "metadata"]
+              : ["video", "cover", "metadata"],
           saveCover: true,
           saveMetadata: true,
         });
@@ -39,10 +117,9 @@ export function SearchPage() {
     onSuccess: async () => {
       setSelected([]);
       await queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      await queryClient.invalidateQueries({ queryKey: ["library"] });
     },
   });
-
-  const results = searchQuery.data?.items ?? [];
 
   const toggle = (id: string) => {
     setSelected((current) =>
@@ -50,61 +127,144 @@ export function SearchPage() {
     );
   };
 
+  const toggleAll = () => {
+    if (selected.length === results.length) {
+      setSelected([]);
+    } else {
+      setSelected(results.map((item) => item.platformItemId));
+    }
+  };
+
   const selectedItems = results.filter((item) =>
     selected.includes(item.platformItemId)
   );
 
+  const gridRows = useMemo(() => {
+    const rows: MediaItem[][] = [];
+    for (let index = 0; index < results.length; index += GRID_COLUMNS) {
+      rows.push(results.slice(index, index + GRID_COLUMNS));
+    }
+    return rows;
+  }, [results]);
+
+  const rowVirtualizer = useVirtualizer({
+    count: viewMode === "grid" ? gridRows.length : results.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => (viewMode === "grid" ? 220 : 52),
+    overscan: 6,
+  });
+
+  const showDouyinFilters =
+    platform === "douyin" && supportedFilters.length > 0;
+
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-4 p-6">
+    <div className="mx-auto flex h-full max-w-6xl flex-col gap-4 p-6">
       <div>
         <h1 className="text-xl font-semibold">关键词搜索</h1>
         <p className="mt-1 text-sm text-slate-500">
-          选择平台后搜索，支持多选批量加入下载队列。
+          抖音已接入真实搜索；支持筛选、分页加载、多选批量下载。
         </p>
       </div>
 
       <Card>
-        <CardBody className="flex flex-wrap items-end gap-3">
-          <div className="space-y-1">
-            <label className="text-xs text-slate-500">平台</label>
-            <select
-              className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm"
-              value={platform}
-              onChange={(event) =>
-                setPlatform(event.target.value as Platform)
-              }
+        <CardBody className="space-y-3">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1">
+              <label className="text-xs text-slate-500">平台</label>
+              <select
+                className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm"
+                value={platform}
+                onChange={(event) => {
+                  setPlatform(event.target.value as Platform);
+                  setResults([]);
+                  setSelected([]);
+                  setCursor(undefined);
+                  setHasMore(false);
+                }}
+              >
+                {adapters.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="min-w-[280px] flex-1 space-y-1">
+              <label className="text-xs text-slate-500">关键词</label>
+              <Input
+                value={keyword}
+                onChange={(event) => setKeyword(event.target.value)}
+                placeholder="输入搜索关键词"
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") void handleSearch();
+                }}
+              />
+            </div>
+            <Button
+              onClick={() => void handleSearch()}
+              disabled={!keyword.trim() || isSearching}
             >
-              {adapters.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
+              {isSearching ? "搜索中…" : "搜索"}
+            </Button>
+            <div className="ml-auto flex gap-1">
+              <Button
+                size="sm"
+                variant={viewMode === "grid" ? "primary" : "secondary"}
+                onClick={() => setViewMode("grid")}
+                aria-label="网格视图"
+              >
+                <Grid3x3 className="h-4 w-4" />
+              </Button>
+              <Button
+                size="sm"
+                variant={viewMode === "table" ? "primary" : "secondary"}
+                onClick={() => setViewMode("table")}
+                aria-label="表格视图"
+              >
+                <List className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
-          <div className="min-w-[280px] flex-1 space-y-1">
-            <label className="text-xs text-slate-500">关键词</label>
-            <Input
-              value={keyword}
-              onChange={(event) => setKeyword(event.target.value)}
-              placeholder="输入搜索关键词"
-            />
-          </div>
-          <Button
-            onClick={() => searchQuery.refetch()}
-            disabled={!keyword.trim() || searchQuery.isFetching}
-          >
-            {searchQuery.isFetching ? "搜索中…" : "搜索"}
-          </Button>
+
+          {showDouyinFilters ? (
+            <div className="flex flex-wrap gap-3 border-t border-slate-100 pt-3">
+              <FilterSelect
+                label="排序"
+                value={sort}
+                options={DOUYIN_SORT_OPTIONS}
+                onChange={setSort}
+              />
+              <FilterSelect
+                label="发布时间"
+                value={publishTime}
+                options={DOUYIN_TIME_OPTIONS}
+                onChange={setPublishTime}
+              />
+            </div>
+          ) : platform === "bilibili" ? (
+            <p className="text-xs text-slate-400">
+              Bilibili 筛选将在 Phase 3 接入；当前为 Mock 搜索结果。
+            </p>
+          ) : null}
         </CardBody>
       </Card>
 
-      {searchQuery.data ? (
-        <div className="text-xs text-slate-500">
-          支持筛选：
-          {searchQuery.data.supportedFilters.length > 0
-            ? searchQuery.data.supportedFilters.join("、")
-            : "无"}
-          {adapter.supportedFilters.length === 0 ? "（当前平台未声明筛选）" : ""}
+      {searchError ? (
+        <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {searchError}
+        </div>
+      ) : null}
+
+      {results.length > 0 ? (
+        <div className="flex items-center justify-between text-xs text-slate-500">
+          <span>共 {results.length} 条结果</span>
+          <button
+            type="button"
+            className="text-slate-600 hover:text-slate-900"
+            onClick={toggleAll}
+          >
+            {selected.length === results.length ? "取消全选" : "全选当前结果"}
+          </button>
         </div>
       ) : null}
 
@@ -116,44 +276,166 @@ export function SearchPage() {
             onClick={() => batchMutation.mutate(selectedItems)}
             disabled={batchMutation.isPending}
           >
-            批量下载
+            {batchMutation.isPending ? "加入队列…" : "批量下载"}
           </Button>
         </div>
       ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {results.map((item) => {
-          const active = selected.includes(item.platformItemId);
-          return (
-            <button
-              key={item.platformItemId}
-              type="button"
-              onClick={() => toggle(item.platformItemId)}
-              className={`rounded-lg border p-3 text-left transition-colors ${
-                active
-                  ? "border-slate-900 bg-slate-50"
-                  : "border-slate-200 bg-white hover:border-slate-300"
-              }`}
-            >
-              <div className="mb-2 aspect-video overflow-hidden rounded-md bg-slate-100">
-                {item.coverUrl ? (
-                  <img
-                    src={item.coverUrl}
-                    alt=""
-                    className="h-full w-full object-cover"
-                  />
-                ) : null}
-              </div>
-              <div className="line-clamp-2 text-sm font-medium">{item.title}</div>
-              <div className="mt-1 flex items-center gap-2 text-xs text-slate-500">
-                <Badge>{platformLabel(item.platform)}</Badge>
-                <span>{item.author.name}</span>
-                <span>{formatDuration(item.durationSec)}</span>
-              </div>
-            </button>
-          );
-        })}
+      <div
+        ref={parentRef}
+        className="h-[min(560px,calc(100vh-340px))] overflow-auto rounded-lg border border-slate-200 bg-white"
+      >
+        {results.length === 0 ? (
+          <div className="flex h-48 items-center justify-center text-sm text-slate-400">
+            {isSearching ? "搜索中…" : "输入关键词开始搜索"}
+          </div>
+        ) : viewMode === "grid" ? (
+          <div
+            style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
+            className="relative w-full"
+          >
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const row = gridRows[virtualRow.index] ?? [];
+              return (
+                <div
+                  key={virtualRow.key}
+                  className="absolute left-0 top-0 grid w-full grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:grid-cols-3"
+                  style={{ transform: `translateY(${virtualRow.start}px)` }}
+                >
+                  {row.map((item) => (
+                    <ResultCard
+                      key={item.platformItemId}
+                      item={item}
+                      active={selected.includes(item.platformItemId)}
+                      onToggle={() => toggle(item.platformItemId)}
+                    />
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div
+            style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
+            className="relative w-full"
+          >
+            <div className="sticky top-0 z-[1] grid grid-cols-[1fr_140px_80px_100px] border-b border-slate-100 bg-white px-3 py-2 text-xs text-slate-500">
+              <span>标题</span>
+              <span>作者</span>
+              <span>时长</span>
+              <span>类型</span>
+            </div>
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const item = results[virtualRow.index];
+              if (!item) return null;
+              const active = selected.includes(item.platformItemId);
+              return (
+                <div
+                  key={item.platformItemId}
+                  className={cn(
+                    "absolute left-0 grid w-full cursor-pointer grid-cols-[1fr_140px_80px_100px] border-b border-slate-50 px-3 py-2 text-sm hover:bg-slate-50",
+                    active && "bg-slate-100"
+                  )}
+                  style={{ transform: `translateY(${virtualRow.start + 32}px)` }}
+                  onClick={() => toggle(item.platformItemId)}
+                >
+                  <span className="truncate font-medium">{item.title}</span>
+                  <span className="truncate text-slate-600">{item.author.name}</span>
+                  <span className="text-slate-500">
+                    {formatDuration(item.durationSec)}
+                  </span>
+                  <span>
+                    <Badge>{item.mediaType}</Badge>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
+
+      {hasMore ? (
+        <div className="flex justify-center pb-2">
+          <Button
+            variant="secondary"
+            onClick={() => void handleLoadMore()}
+            disabled={isLoadingMore}
+          >
+            {isLoadingMore ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                加载中…
+              </>
+            ) : (
+              "加载更多"
+            )}
+          </Button>
+        </div>
+      ) : null}
     </div>
+  );
+}
+
+function FilterSelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="space-y-1 text-xs text-slate-500">
+      <span>{label}</span>
+      <select
+        className="block h-9 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function ResultCard({
+  item,
+  active,
+  onToggle,
+}: {
+  item: MediaItem;
+  active: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className={cn(
+        "rounded-lg border p-3 text-left transition-colors",
+        active
+          ? "border-slate-900 bg-slate-50"
+          : "border-slate-200 bg-white hover:border-slate-300"
+      )}
+    >
+      <div className="mb-2 aspect-video overflow-hidden rounded-md bg-slate-100">
+        {item.coverUrl ? (
+          <img src={item.coverUrl} alt="" className="h-full w-full object-cover" />
+        ) : null}
+      </div>
+      <div className="line-clamp-2 text-sm font-medium">{item.title}</div>
+      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+        <Badge>{platformLabel(item.platform)}</Badge>
+        <span>{item.author.name}</span>
+        <span>{formatDuration(item.durationSec)}</span>
+      </div>
+    </button>
   );
 }

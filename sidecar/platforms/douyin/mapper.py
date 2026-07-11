@@ -25,7 +25,11 @@ def _media_type(aweme: dict[str, Any]) -> str:
     return "video"
 
 
-def aweme_to_parsed_media(aweme: dict[str, Any], original_url: str) -> dict[str, Any]:
+def aweme_to_media_item(
+    aweme: dict[str, Any],
+    *,
+    search_keyword: str | None = None,
+) -> dict[str, Any]:
     author = aweme.get("author") or {}
     aweme_id = str(aweme.get("aweme_id") or "")
     media_type = _media_type(aweme)
@@ -35,6 +39,33 @@ def aweme_to_parsed_media(aweme: dict[str, Any], original_url: str) -> dict[str,
         images = aweme.get("images") or []
         if images:
             cover_source = images[0].get("url_list") or images[0]
+
+    return {
+        "platform": "douyin",
+        "platformItemId": aweme_id,
+        "originalUrl": f"https://www.douyin.com/video/{aweme_id}",
+        "canonicalUrl": f"https://www.douyin.com/video/{aweme_id}",
+        "title": (aweme.get("desc") or f"Douyin {aweme_id}").strip() or aweme_id,
+        "description": aweme.get("desc"),
+        "author": {
+            "id": str(author.get("sec_uid") or author.get("uid") or "unknown"),
+            "name": str(author.get("nickname") or "未知作者"),
+            "avatarUrl": _first_url(author.get("avatar_thumb")),
+        },
+        "publishedAt": int(aweme.get("create_time") or 0) * 1000 or None,
+        "mediaType": media_type,
+        "durationSec": int((video.get("duration") or 0) // 1000)
+        if video.get("duration")
+        else None,
+        "coverUrl": _first_url(cover_source),
+        "searchKeyword": search_keyword,
+    }
+
+
+def aweme_to_parsed_media(aweme: dict[str, Any], original_url: str) -> dict[str, Any]:
+    item = aweme_to_media_item(aweme)
+    item["originalUrl"] = original_url
+    media_type = item["mediaType"]
 
     assets: list[dict[str, Any]] = [
         {
@@ -76,25 +107,7 @@ def aweme_to_parsed_media(aweme: dict[str, Any], original_url: str) -> dict[str,
         )
 
     return {
-        "item": {
-            "platform": "douyin",
-            "platformItemId": aweme_id,
-            "originalUrl": original_url,
-            "canonicalUrl": f"https://www.douyin.com/video/{aweme_id}",
-            "title": (aweme.get("desc") or f"Douyin {aweme_id}").strip() or aweme_id,
-            "description": aweme.get("desc"),
-            "author": {
-                "id": str(author.get("sec_uid") or author.get("uid") or "unknown"),
-                "name": str(author.get("nickname") or "未知作者"),
-                "avatarUrl": _first_url(author.get("avatar_thumb")),
-            },
-            "publishedAt": int(aweme.get("create_time") or 0) * 1000 or None,
-            "mediaType": media_type,
-            "durationSec": int((video.get("duration") or 0) // 1000)
-            if video.get("duration")
-            else None,
-            "coverUrl": _first_url(cover_source),
-        },
+        "item": item,
         "assets": assets,
         "qualities": [
             {"id": "highest", "label": "最高画质", "height": 1080},

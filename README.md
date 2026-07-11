@@ -9,18 +9,17 @@ Local-first desktop app for searching, collecting, and managing publicly accessi
 - **Data**: SQLite (application database)
 - **Engine**: Python sidecar (FastAPI) — Phase 0 health check only
 
-## Phase 1 status
+## Phase 2 status
 
-Douyin link workflow uses the real `douyin-downloader` engine via Python sidecar:
+Douyin keyword search is wired to the real engine:
 
-- Parse Douyin share links (video / gallery) through `/v1/parse`
-- Download selected assets to the Cliprove library layout
-- Cookie validation via settings
-- Bilibili remains on mock until Phase 3
+- `/v1/search` with pagination (`cursor`) and filters (`sort`, `publish_time`)
+- Search page supports grid/table views, virtualized lists, multi-select, and batch enqueue
+- `searchKeyword` is preserved on library items discovered via search
 
-## Phase 0 status (completed)
+## Phase 1 status (completed)
 
-Foundation delivered mock end-to-end flows for all five pages, SQLite persistence, and sidecar health checks.
+Douyin link parse/download via sidecar and `douyin-downloader` engine.
 
 ## Prerequisites
 

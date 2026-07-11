@@ -17,7 +17,7 @@ except ImportError as exc:  # pragma: no cover
 from jobs import Job, JobManager
 from platforms.douyin.service import douyin_service
 
-APP_VERSION = "0.2.0-phase1"
+APP_VERSION = "0.3.0-phase2"
 job_manager = JobManager()
 
 app = FastAPI(title="Cliprove Sidecar", version=APP_VERSION)
@@ -44,6 +44,18 @@ class AuthRequest(BaseModel):
     platform: str
     cookies: str = ""
     proxy: str = ""
+
+
+class SearchRequest(BaseModel):
+    platform: str
+    keyword: str
+    cursor: str | None = None
+    page_size: int = Field(default=20, alias="pageSize")
+    filters: dict[str, str] | None = None
+    cookies: str = ""
+    proxy: str = ""
+
+    model_config = {"populate_by_name": True}
 
 
 @app.get("/health")
@@ -98,6 +110,27 @@ def get_job(job_id: str) -> dict[str, Any]:
     if job is None:
         raise HTTPException(status_code=404, detail="job not found")
     return job.to_dict()
+
+
+@app.post("/v1/search")
+async def search_media(request: SearchRequest) -> dict[str, Any]:
+    try:
+        if request.platform == "douyin":
+            return await douyin_service.search(
+                request.keyword,
+                cursor=request.cursor,
+                page_size=request.page_size,
+                filters=request.filters,
+                cookies=request.cookies,
+                proxy=request.proxy,
+            )
+        raise HTTPException(status_code=400, detail="unsupported platform")
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @app.post("/v1/auth/validate")

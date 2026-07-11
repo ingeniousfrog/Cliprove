@@ -6,7 +6,8 @@ use serde_json::Value;
 
 use crate::errors::{AppError, AppResult};
 use crate::models::{
-    AppSettings, AuthStatus, DownloadOptions, MediaItem, ParsedMedia, SidecarHealth,
+    AppSettings, AuthStatus, DownloadOptions, MediaItem, ParsedMedia, SearchPage, SearchQuery,
+    SidecarHealth,
 };
 
 #[derive(Clone)]
@@ -59,6 +60,25 @@ impl SidecarClient {
 
     pub fn get_job(&self, job_id: &str) -> AppResult<SidecarJob> {
         self.get(&format!("/v1/jobs/{job_id}"))
+    }
+
+    pub fn search_media(
+        &self,
+        platform: &str,
+        query: &SearchQuery,
+        cursor: Option<&str>,
+        settings: &AppSettings,
+    ) -> AppResult<SearchPage> {
+        let body = serde_json::json!({
+            "platform": platform,
+            "keyword": query.keyword,
+            "cursor": cursor,
+            "pageSize": query.page_size.unwrap_or(20),
+            "filters": query.filters,
+            "cookies": settings.douyin_cookies,
+            "proxy": ""
+        });
+        self.post("/v1/search", &body)
     }
 
     pub fn validate_auth(&self, platform: &str, settings: &AppSettings) -> AppResult<AuthStatus> {
