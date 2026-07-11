@@ -464,16 +464,8 @@ pub fn get_app_paths(state: State<Arc<AppState>>) -> Result<serde_json::Value, S
 #[tauri::command]
 pub fn get_settings(state: State<Arc<AppState>>) -> Result<AppSettings, String> {
     run(|| {
-        let settings = state.db.settings().get_all()?;
-        if let Some(resolved) = shell::resolve_ffmpeg_path(&settings.ffmpeg_path) {
-            let resolved_str = resolved.to_string_lossy().to_string();
-            if resolved_str != settings.ffmpeg_path {
-                let mut partial = settings;
-                partial.ffmpeg_path = resolved_str;
-                return state.db.settings().update(&partial);
-            }
-        }
-        Ok(settings)
+        ensure_ffmpeg_for_db(&state)?;
+        state.db.settings().get_all()
     })
 }
 
@@ -555,6 +547,40 @@ pub fn start_sidecar(state: State<Arc<AppState>>) -> Result<SidecarHealth, Strin
 #[tauri::command]
 pub fn sidecar_health(state: State<Arc<AppState>>) -> Result<SidecarHealth, String> {
     run(|| state.sidecar.health())
+}
+
+#[tauri::command]
+pub fn ensure_ffmpeg(state: State<Arc<AppState>>) -> Result<FfmpegStatus, String> {
+    run(|| ensure_ffmpeg_for_db(&state))
+}
+
+#[tauri::command]
+pub fn count_library(state: State<Arc<AppState>>) -> Result<i64, String> {
+    run(|| state.db.library().count())
+}
+
+fn ensure_ffmpeg_for_db(state: &AppState) -> AppResult<FfmpegStatus> {
+    let settings = state.db.settings().get_all()?;
+    if let Some(resolved) = shell::resolve_ffmpeg_path(&settings.ffmpeg_path) {
+        let resolved_str = resolved.to_string_lossy().to_string();
+        let (valid, message, resolved_path) = shell::validate_ffmpeg(&resolved_str)?;
+        if valid && resolved_str != settings.ffmpeg_path {
+            let mut partial = settings;
+            partial.ffmpeg_path = resolved_str;
+            state.db.settings().update(&partial)?;
+        }
+        return Ok(FfmpegStatus {
+            valid,
+            message,
+            resolved_path,
+        });
+    }
+
+    Ok(FfmpegStatus {
+        valid: false,
+        message: "未找到 FFmpeg，请安装后重试".to_string(),
+        resolved_path: None,
+    })
 }
 
 fn run<T>(f: impl FnOnce() -> AppResult<T>) -> Result<T, String> {

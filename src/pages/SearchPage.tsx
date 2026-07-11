@@ -9,7 +9,11 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { CoverImage } from "@/components/media/CoverImage";
 import { MediaPreviewDialog } from "@/components/media/MediaPreviewDialog";
-import { enqueueDownloadBatch, searchMedia } from "@/lib/tauri";
+import { FfmpegRequiredDialog } from "@/components/setup/FfmpegRequiredDialog";
+import { PlatformAuthDialog } from "@/components/setup/PlatformAuthDialog";
+import { isAuthErrorCode, parseErrorCode } from "@/lib/errors";
+import { batchItemsRequireFfmpeg } from "@/lib/ffmpeg";
+import { enqueueDownloadBatch, ensureFfmpeg, searchMedia } from "@/lib/tauri";
 import { cn, formatDuration, formatInvokeError, platformLabel } from "@/lib/utils";
 import type { MediaItem, Platform, SearchPage } from "@/types";
 
@@ -51,6 +55,10 @@ export function SearchPage() {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [batchMessage, setBatchMessage] = useState<string | null>(null);
   const [previewItem, setPreviewItem] = useState<MediaItem | null>(null);
+  const [ffmpegDialogOpen, setFfmpegDialogOpen] = useState(false);
+  const [authDialogOpen, setAuthDialogOpen] = useState(false);
+  const [authBannerVisible, setAuthBannerVisible] = useState(false);
+  const pendingBatchRef = useRef<MediaItem[]>([]);
   const queryClient = useQueryClient();
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -82,11 +90,13 @@ export function SearchPage() {
     try {
       const page = await runSearch();
       applyPage(page, false);
+      setAuthBannerVisible(false);
     } catch (error) {
       setResults([]);
       setCursor(undefined);
       setHasMore(false);
       setSearchError(formatInvokeError(error));
+      setAuthBannerVisible(isAuthErrorCode(parseErrorCode(error)));
     } finally {
       setIsSearching(false);
     }
@@ -124,19 +134,30 @@ export function SearchPage() {
     saveSubtitles: item.platform === "bilibili",
   });
 
+  const runBatchDownload = async (items: MediaItem[]) => {
+    if (items.length === 0) {
+      throw new Error("请先选择要下载的视频");
+    }
+    if (batchItemsRequireFfmpeg(items)) {
+      const status = await ensureFfmpeg();
+      if (!status.valid) {
+        pendingBatchRef.current = items;
+        setFfmpegDialogOpen(true);
+        return;
+      }
+    }
+    const result = await enqueueDownloadBatch(items, buildDownloadOptions(items[0]));
+    if (result.enqueuedCount === 0) {
+      const firstSkip = result.results.find((entry) => entry.message)?.message;
+      throw new Error(firstSkip ?? "没有可加入队列的下载任务");
+    }
+    return result;
+  };
+
   const batchMutation = useMutation({
-    mutationFn: async (items: MediaItem[]) => {
-      if (items.length === 0) {
-        throw new Error("请先选择要下载的视频");
-      }
-      const result = await enqueueDownloadBatch(items, buildDownloadOptions(items[0]));
-      if (result.enqueuedCount === 0) {
-        const firstSkip = result.results.find((entry) => entry.message)?.message;
-        throw new Error(firstSkip ?? "没有可加入队列的下载任务");
-      }
-      return result;
-    },
+    mutationFn: runBatchDownload,
     onSuccess: async (result) => {
+      if (!result) return;
       const skipped = result.results.filter((entry) => entry.status === "skipped").length;
       setBatchMessage(
         skipped > 0
@@ -188,6 +209,15 @@ export function SearchPage() {
           Bilibili 已接入真实搜索；支持筛选、分页加载、多选批量下载。
         </p>
       </div>
+
+      {authBannerVisible ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <span>登录 B 站后可搜索更多内容或下载高清资源。</span>
+          <Button size="sm" onClick={() => setAuthDialogOpen(true)}>
+            去登录
+          </Button>
+        </div>
+      ) : null}
 
       <Card>
         <CardBody className="space-y-3">
@@ -425,6 +455,30 @@ export function SearchPage() {
       ) : null}
 
       <MediaPreviewDialog item={previewItem} onClose={() => setPreviewItem(null)} />
+      <FfmpegRequiredDialog
+        open={ffmpegDialogOpen}
+        onClose={() => {
+          setFfmpegDialogOpen(false);
+          pendingBatchRef.current = [];
+        }}
+        onReady={() => {
+          const items = pendingBatchRef.current;
+          if (items.length > 0) {
+            batchMutation.mutate(items);
+          }
+        }}
+      />
+      <PlatformAuthDialog
+        open={authDialogOpen}
+        platform="bilibili"
+        onClose={() => setAuthDialogOpen(false)}
+        onLoggedIn={() => {
+          setAuthBannerVisible(false);
+          if (keyword.trim()) {
+            void handleSearch();
+          }
+        }}
+      />
     </div>
   );
 }

@@ -48,15 +48,30 @@ npm run tauri build
 
 ## FFmpeg
 
-当前版本**不捆绑** FFmpeg，用户需自行安装并在设置页验证路径：
+发布构建会通过 `scripts/fetch-ffmpeg.sh` 下载 macOS static FFmpeg 并打入 `.app/Contents/Resources/ffmpeg/`。
+
+检测优先级：
+
+1. 用户在设置中手动指定的路径
+2. 系统 PATH / Homebrew 常见路径
+3. App 内置 FFmpeg（fallback）
+
+开发环境仍优先使用本机已安装的 FFmpeg；若未执行 fetch 脚本，行为与旧版一致。
+
+```bash
+chmod +x scripts/fetch-ffmpeg.sh
+./scripts/fetch-ffmpeg.sh
+```
+
+也可手动安装系统 FFmpeg：
 
 ```bash
 brew install ffmpeg
 ```
 
-设置页填写 `ffmpeg` 或绝对路径（如 `/opt/homebrew/bin/ffmpeg`），点击「验证 FFmpeg」。
+Bilibili 音视频合并、部分高清流依赖 FFmpeg。内置 FFmpeg 基于 LGPL 许可，分发时需保留许可说明；源码可从 [FFmpeg 官网](https://ffmpeg.org/download.html) 获取。
 
-Bilibili 音视频合并、部分高清流依赖 FFmpeg。
+打包时 `codesign` 需覆盖 `Resources/ffmpeg/` 下的二进制（与 sidecar 同级处理）。
 
 ## 引擎更新
 

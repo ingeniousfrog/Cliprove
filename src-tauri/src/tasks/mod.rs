@@ -151,12 +151,7 @@ async fn run_sidecar_task(
             }
             "failed" => {
                 let message = current.error.unwrap_or_else(|| "下载失败".to_string());
-                let error = StructuredError {
-                    code: "engine_failure".to_string(),
-                    message: message.clone(),
-                    suggestion: Some("检查 Cookie、FFmpeg 路径与网络连接".to_string()),
-                    technical_detail: Some(message),
-                };
+                let error = structured_error_from_sidecar_message(&message);
                 db.tasks().mark_failed(&task_id, &error)?;
                 return Ok(());
             }
@@ -333,6 +328,75 @@ pub fn spawn_task(
         let structured = structured_error_from_app_error(&error);
         let _ = state.db.tasks().mark_failed(&task_id, &structured);
     });
+}
+
+fn structured_error_from_sidecar_message(message: &str) -> StructuredError {
+    if let Some(rest) = message.strip_prefix("CLIPROVE_FFMPEG_UNAVAILABLE:") {
+        return StructuredError {
+            code: "ffmpeg_unavailable".to_string(),
+            message: rest.trim().to_string(),
+            suggestion: Some(
+                "请安装 FFmpeg（brew install ffmpeg）或在设置中指定路径".to_string(),
+            ),
+            technical_detail: Some(message.to_string()),
+        };
+    }
+    if let Some(rest) = message.strip_prefix("CLIPROVE_AUTH_REQUIRED:") {
+        return StructuredError {
+            code: "auth_required".to_string(),
+            message: rest.trim().to_string(),
+            suggestion: Some("请在弹窗中扫码登录后重试".to_string()),
+            technical_detail: Some(message.to_string()),
+        };
+    }
+    if let Some(rest) = message.strip_prefix("CLIPROVE_AUTH_EXPIRED:") {
+        return StructuredError {
+            code: "auth_expired".to_string(),
+            message: rest.trim().to_string(),
+            suggestion: Some("请重新登录平台账号后重试".to_string()),
+            technical_detail: Some(message.to_string()),
+        };
+    }
+    if let Some(rest) = message.strip_prefix("CLIPROVE_VERIFICATION_REQUIRED:") {
+        return StructuredError {
+            code: "verification_required".to_string(),
+            message: rest.trim().to_string(),
+            suggestion: Some("请在浏览器完成验证后重试".to_string()),
+            technical_detail: Some(message.to_string()),
+        };
+    }
+
+    let lowered = message.to_lowercase();
+    if lowered.contains("ffmpeg") {
+        return StructuredError {
+            code: "ffmpeg_unavailable".to_string(),
+            message: message.to_string(),
+            suggestion: Some(
+                "请安装 FFmpeg（brew install ffmpeg）或在设置中指定路径".to_string(),
+            ),
+            technical_detail: Some(message.to_string()),
+        };
+    }
+    if lowered.contains("sessdata")
+        || lowered.contains("login")
+        || lowered.contains("sign in")
+        || lowered.contains("登录")
+        || lowered.contains("cookie")
+    {
+        return StructuredError {
+            code: "auth_required".to_string(),
+            message: message.to_string(),
+            suggestion: Some("请登录对应平台后重试".to_string()),
+            technical_detail: Some(message.to_string()),
+        };
+    }
+
+    StructuredError {
+        code: "engine_failure".to_string(),
+        message: message.to_string(),
+        suggestion: Some("检查 Cookie、FFmpeg 路径与网络连接".to_string()),
+        technical_detail: Some(message.to_string()),
+    }
 }
 
 fn structured_error_from_app_error(error: &AppError) -> StructuredError {

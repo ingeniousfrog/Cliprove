@@ -11,6 +11,7 @@ from bilibili_api import search, video
 from bilibili_api.search import OrderVideo, SearchObjectType
 
 from platforms.cookies import cookie_header_to_dict, normalize_bilibili_url, write_netscape_cookie_file
+from platforms.errors import map_exception
 
 from .downloader import download_video
 from .mapper import bilibili_preview_url, info_to_parsed_media, search_result_to_media_item
@@ -80,11 +81,14 @@ class BilibiliService:
         opts = _ydl_base_opts(cookies, proxy)
 
         def extract() -> dict[str, Any]:
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(normalized, download=False)
-                if not info:
-                    raise ValueError("无法解析 Bilibili 链接")
-                return info
+            try:
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    info = ydl.extract_info(normalized, download=False)
+                    if not info:
+                        raise ValueError("无法解析 Bilibili 链接")
+                    return info
+            except Exception as exc:  # noqa: BLE001
+                raise map_exception(exc) from exc
 
         info = await asyncio.to_thread(extract)
         parsed = info_to_parsed_media(info, url.strip())

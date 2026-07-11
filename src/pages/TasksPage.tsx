@@ -1,10 +1,14 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listen } from "@tauri-apps/api/event";
+import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { TaskActionButtons } from "@/components/tasks/TaskActionButtons";
+import { FfmpegRequiredDialog } from "@/components/setup/FfmpegRequiredDialog";
+import { PlatformAuthDialog } from "@/components/setup/PlatformAuthDialog";
 import { useTaskActions } from "@/hooks/useTaskActions";
+import { isAuthErrorCode } from "@/lib/errors";
 import { listTasks } from "@/lib/tauri";
 import {
   formatDate,
@@ -12,11 +16,14 @@ import {
   platformLabel,
   statusLabel,
 } from "@/lib/utils";
-import type { DownloadProgress } from "@/types";
+import type { DownloadProgress, Platform } from "@/types";
 
 export function TasksPage() {
   const queryClient = useQueryClient();
   const { pendingAction, runAction } = useTaskActions();
+  const [ffmpegDialogOpen, setFfmpegDialogOpen] = useState(false);
+  const [authDialogOpen, setAuthDialogOpen] = useState(false);
+  const [authPlatform, setAuthPlatform] = useState<Platform>("bilibili");
 
   const { data: tasks = [], isLoading } = useQuery({
     queryKey: ["tasks"],
@@ -40,6 +47,11 @@ export function TasksPage() {
   }, [queryClient]);
 
   const interruptedTasks = tasks.filter((task) => task.status === "interrupted");
+
+  const openAuthDialog = (platform: Platform) => {
+    setAuthPlatform(platform);
+    setAuthDialogOpen(true);
+  };
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-4 p-6">
@@ -137,8 +149,28 @@ export function TasksPage() {
                         onAction={runAction}
                       />
                       {task.error ? (
-                        <div className="mt-1 text-xs text-red-600">
-                          {task.error.message}
+                        <div className="mt-1 space-y-1">
+                          <div className="text-xs text-red-600">
+                            {task.error.message}
+                          </div>
+                          {task.error.code === "ffmpeg_unavailable" ? (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => setFfmpegDialogOpen(true)}
+                            >
+                              安装 FFmpeg
+                            </Button>
+                          ) : null}
+                          {isAuthErrorCode(task.error.code) ? (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => openAuthDialog(task.platform)}
+                            >
+                              重新登录
+                            </Button>
+                          ) : null}
                         </div>
                       ) : null}
                     </td>
@@ -149,6 +181,19 @@ export function TasksPage() {
           )}
         </CardBody>
       </Card>
+
+      <FfmpegRequiredDialog
+        open={ffmpegDialogOpen}
+        onClose={() => setFfmpegDialogOpen(false)}
+      />
+      <PlatformAuthDialog
+        open={authDialogOpen}
+        platform={authPlatform}
+        onClose={() => setAuthDialogOpen(false)}
+        onLoggedIn={() => {
+          setAuthDialogOpen(false);
+        }}
+      />
     </div>
   );
 }

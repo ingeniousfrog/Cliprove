@@ -12,6 +12,7 @@ import yt_dlp
 
 from platforms.cookies import write_netscape_cookie_file
 from platforms.cover_url import normalize_cover_url
+from platforms.errors import ffmpeg_unavailable, map_exception
 from platforms.ffmpeg_resolve import resolve_ffmpeg_path
 
 
@@ -97,9 +98,8 @@ def _download_video_sync(
     if resolved_ffmpeg:
         ydl_opts["ffmpeg_location"] = resolved_ffmpeg
     elif save_video:
-        raise RuntimeError(
-            "未找到 FFmpeg。macOS 可在设置中填写 /opt/homebrew/bin/ffmpeg，"
-            "或先执行 brew install ffmpeg"
+        raise ffmpeg_unavailable(
+            "未找到 FFmpeg。macOS 可执行 brew install ffmpeg，或在设置中指定路径"
         )
 
     if cookie_file:

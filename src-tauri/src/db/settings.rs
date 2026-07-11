@@ -69,6 +69,7 @@ fn apply_setting(settings: &mut AppSettings, key: &str, value: &str) {
         "save_audio" => settings.save_audio = value == "true",
         "save_subtitles" => settings.save_subtitles = value == "true",
         "clipboard_detect" => settings.clipboard_detect = value == "true",
+        "onboarding_completed" => settings.onboarding_completed = value == "true",
         _ => {}
     }
 }
@@ -100,6 +101,7 @@ fn merge_settings(mut base: AppSettings, partial: &AppSettings) -> AppSettings {
     base.save_audio = partial.save_audio;
     base.save_subtitles = partial.save_subtitles;
     base.clipboard_detect = partial.clipboard_detect;
+    base.onboarding_completed = partial.onboarding_completed;
     base
 }
 
@@ -120,5 +122,9 @@ fn settings_entries(settings: &AppSettings) -> Vec<(&str, String)> {
         ("save_audio", settings.save_audio.to_string()),
         ("save_subtitles", settings.save_subtitles.to_string()),
         ("clipboard_detect", settings.clipboard_detect.to_string()),
+        (
+            "onboarding_completed",
+            settings.onboarding_completed.to_string(),
+        ),
     ]
 }

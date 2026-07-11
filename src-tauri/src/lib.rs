@@ -27,6 +27,14 @@ pub fn run() {
             database.tasks().recover_interrupted()?;
             let settings = database.settings().get_all()?;
             std::fs::create_dir_all(&settings.download_directory).ok();
+            if let Some(resolved) = shell::resolve_ffmpeg_path(&settings.ffmpeg_path) {
+                let resolved_str = resolved.to_string_lossy().to_string();
+                if resolved_str != settings.ffmpeg_path {
+                    let mut partial = settings;
+                    partial.ffmpeg_path = resolved_str;
+                    let _ = database.settings().update(&partial);
+                }
+            }
             let state = Arc::new(AppState::new(database));
             let sidecar = Arc::clone(&state.sidecar);
             app.manage(state);
@@ -62,6 +70,8 @@ pub fn run() {
             commands::open_local_file,
             commands::read_local_file,
             commands::validate_ffmpeg,
+            commands::ensure_ffmpeg,
+            commands::count_library,
             commands::get_app_paths,
             commands::get_settings,
             commands::update_settings,

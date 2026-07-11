@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 from pathlib import Path
 
@@ -35,4 +36,9 @@ def resolve_ffmpeg_path(configured: str = "ffmpeg") -> str | None:
     for candidate in ("ffmpeg", *COMMON_FFMPEG_PATHS):
         if is_valid(candidate):
             return normalize(candidate)
+
+    bundled = os.environ.get("CLIPROVE_BUNDLED_FFMPEG", "").strip()
+    if bundled and is_valid(bundled):
+        return normalize(bundled)
+
     return None

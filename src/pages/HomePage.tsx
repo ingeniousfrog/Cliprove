@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { listen } from "@tauri-apps/api/event";
 import { Button } from "@/components/ui/button";
@@ -8,9 +8,13 @@ import { Badge } from "@/components/ui/badge";
 import { TaskActionButtons } from "@/components/tasks/TaskActionButtons";
 import { CoverImage } from "@/components/media/CoverImage";
 import { MediaPreviewDialog } from "@/components/media/MediaPreviewDialog";
+import { FfmpegRequiredDialog } from "@/components/setup/FfmpegRequiredDialog";
+import { PlatformAuthDialog } from "@/components/setup/PlatformAuthDialog";
 import { detectAdapter } from "@/adapters";
 import { useTaskActions } from "@/hooks/useTaskActions";
-import { enqueueDownload, getSettings, listTasks, parseLink } from "@/lib/tauri";
+import { isAuthErrorCode, parseErrorCode } from "@/lib/errors";
+import { downloadOptionsRequireFfmpeg } from "@/lib/ffmpeg";
+import { enqueueDownload, ensureFfmpeg, getSettings, listTasks, parseLink } from "@/lib/tauri";
 import { useAppStore } from "@/stores/app";
 import {
   formatDate,
@@ -24,11 +28,14 @@ export function HomePage() {
   const [url, setUrl] = useState("");
   const [selectedAssets, setSelectedAssets] = useState<string[]>([]);
   const [selectedQuality, setSelectedQuality] = useState<string>("best");
+  const [ffmpegDialogOpen, setFfmpegDialogOpen] = useState(false);
+  const [authDialogOpen, setAuthDialogOpen] = useState(false);
   const queryClient = useQueryClient();
   const { parsedMedia, setParsedMedia } = useAppStore();
   const { pendingAction, runAction } = useTaskActions();
   const [pasting, setPasting] = useState(false);
   const [previewItem, setPreviewItem] = useState<MediaItem | null>(null);
+  const retryDownloadRef = useRef(false);
 
   const detected = url.trim() ? detectAdapter(url.trim()) : undefined;
 
@@ -43,6 +50,11 @@ export function HomePage() {
       setParsedMedia(data);
       setSelectedAssets(data.assets.map((asset) => asset.id));
       setSelectedQuality(data.qualities?.[0]?.id ?? "best");
+    },
+    onError: (error) => {
+      if (isAuthErrorCode(parseErrorCode(error))) {
+        setAuthDialogOpen(true);
+      }
     },
   });
 
@@ -60,6 +72,7 @@ export function HomePage() {
       await enqueueDownload(parsedMedia.item, options);
     },
     onSuccess: async () => {
+      retryDownloadRef.current = false;
       await queryClient.invalidateQueries({ queryKey: ["tasks"] });
       await queryClient.invalidateQueries({ queryKey: ["library"] });
     },
@@ -81,6 +94,29 @@ export function HomePage() {
     queryKey: ["settings"],
     queryFn: getSettings,
   });
+
+  const buildDownloadOptions = (): DownloadOptions => ({
+    assets: selectedAssets,
+    qualityId: selectedQuality,
+    saveCover: selectedAssets.includes("cover"),
+    saveAudio: selectedAssets.includes("audio"),
+    saveMetadata: selectedAssets.includes("metadata"),
+    saveSubtitles: selectedAssets.includes("subtitle"),
+  });
+
+  const startDownload = async () => {
+    if (!parsedMedia || selectedAssets.length === 0) return;
+    const options = buildDownloadOptions();
+    if (downloadOptionsRequireFfmpeg(options, parsedMedia.item.mediaType)) {
+      const status = await ensureFfmpeg();
+      if (!status.valid) {
+        retryDownloadRef.current = true;
+        setFfmpegDialogOpen(true);
+        return;
+      }
+    }
+    downloadMutation.mutate();
+  };
 
   const pasteFromClipboard = async () => {
     setPasting(true);
@@ -176,9 +212,16 @@ export function HomePage() {
             </div>
           </div>
           {parseMutation.isError ? (
-            <p className="text-sm text-red-600">
-              {(parseMutation.error as Error).message}
-            </p>
+            <div className="space-y-2">
+              <p className="text-sm text-red-600">
+                {(parseMutation.error as Error).message}
+              </p>
+              {isAuthErrorCode(parseErrorCode(parseMutation.error)) ? (
+                <Button size="sm" onClick={() => setAuthDialogOpen(true)}>
+                  去登录
+                </Button>
+              ) : null}
+            </div>
           ) : null}
         </CardBody>
       </Card>
@@ -263,7 +306,7 @@ export function HomePage() {
               </Button>
               <Button
                 loading={downloadMutation.isPending}
-                onClick={() => downloadMutation.mutate()}
+                onClick={() => void startDownload()}
                 disabled={selectedAssets.length === 0}
               >
                 {downloadMutation.isPending ? "加入队列…" : "开始下载"}
@@ -319,6 +362,28 @@ export function HomePage() {
       </Card>
 
       <MediaPreviewDialog item={previewItem} onClose={() => setPreviewItem(null)} />
+      <FfmpegRequiredDialog
+        open={ffmpegDialogOpen}
+        onClose={() => {
+          setFfmpegDialogOpen(false);
+          retryDownloadRef.current = false;
+        }}
+        onReady={() => {
+          if (retryDownloadRef.current) {
+            downloadMutation.mutate();
+          }
+        }}
+      />
+      <PlatformAuthDialog
+        open={authDialogOpen}
+        platform="bilibili"
+        onClose={() => setAuthDialogOpen(false)}
+        onLoggedIn={() => {
+          if (parseMutation.isError) {
+            parseMutation.mutate();
+          }
+        }}
+      />
     </div>
   );
 }

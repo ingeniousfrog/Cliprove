@@ -46,6 +46,12 @@ impl SidecarManager {
         let mut command = Command::new(&program);
         command.args(&args);
         command.env("PATH", augmented_path());
+        if let Some(bundled) = crate::shell::bundled_ffmpeg_path() {
+            command.env(
+                "CLIPROVE_BUNDLED_FFMPEG",
+                bundled.to_string_lossy().to_string(),
+            );
+        }
         if let Some(dir) = working_dir {
             command.current_dir(dir);
         }

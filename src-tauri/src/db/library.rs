@@ -27,6 +27,16 @@ impl<'a> LibraryRepository<'a> {
         Ok(count > 0)
     }
 
+    pub fn count(&self) -> AppResult<i64> {
+        let conn = self.conn.lock().map_err(|_| {
+            AppError::Message("database lock poisoned".to_string())
+        })?;
+        let count: i64 = conn.query_row("SELECT COUNT(1) FROM library_items", [], |row| {
+            row.get(0)
+        })?;
+        Ok(count)
+    }
+
     pub fn get(&self, id: &str) -> AppResult<Option<LibraryItem>> {
         let item = {
             let conn = self.conn.lock().map_err(|_| {

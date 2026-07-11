@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   getAppPaths,
   getSettings,
+  ensureFfmpeg,
   sidecarHealth,
   startSidecar,
   updateSettings,
@@ -20,6 +21,8 @@ export function SettingsPage() {
   const [draft, setDraft] = useState<AppSettings | null>(null);
   const [dirty, setDirty] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  const [showAdvancedFfmpeg, setShowAdvancedFfmpeg] = useState(false);
 
   const settingsQuery = useQuery({
     queryKey: ["settings"],
@@ -64,6 +67,22 @@ export function SettingsPage() {
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ["sidecar-health"] }),
   });
+
+  const ensureFfmpegMutation = useMutation({
+    mutationFn: ensureFfmpeg,
+    onSuccess: (status) => {
+      if (!status.valid || !draft) return;
+      const nextPath = status.resolvedPath?.trim() || draft.ffmpegPath;
+      if (nextPath !== draft.ffmpegPath) {
+        setDraft({ ...draft, ffmpegPath: nextPath });
+        queryClient.setQueryData(["settings"], { ...draft, ffmpegPath: nextPath });
+      }
+    },
+  });
+
+  useEffect(() => {
+    ensureFfmpegMutation.mutate();
+  }, []);
 
   const validateFfmpegMutation = useMutation({
     mutationFn: () => validateFfmpeg(draft?.ffmpegPath ?? "ffmpeg"),
@@ -170,33 +189,75 @@ export function SettingsPage() {
               />
             </Field>
           </div>
-          <Field label="FFmpeg 路径">
-            <Input
-              value={draft.ffmpegPath}
-              onChange={(event) => updateField("ffmpegPath", event.target.value)}
-              onBlur={() => {
-                if (!draft) return;
-                persistDraft(draft);
-              }}
-            />
-          </Field>
+          <div className="rounded-md border border-slate-100 bg-slate-50 p-3 text-sm text-slate-600">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-slate-500">FFmpeg 状态</span>
+              <Badge
+                tone={
+                  (ensureFfmpegMutation.data ?? validateFfmpegMutation.data)?.valid
+                    ? "success"
+                    : "warning"
+                }
+              >
+                {(ensureFfmpegMutation.data ?? validateFfmpegMutation.data)?.valid
+                  ? "已就绪"
+                  : "未找到"}
+              </Badge>
+            </div>
+            {(ensureFfmpegMutation.data ?? validateFfmpegMutation.data)?.resolvedPath ? (
+              <div className="mt-2 break-all text-xs text-slate-500">
+                {(ensureFfmpegMutation.data ?? validateFfmpegMutation.data)?.resolvedPath}
+              </div>
+            ) : (
+              <p className="mt-2 text-xs text-slate-500">
+                应用启动时会自动检测 FFmpeg。下载视频时若未找到会提示安装。
+              </p>
+            )}
+            {(ensureFfmpegMutation.data ?? validateFfmpegMutation.data)?.message ? (
+              <p className="mt-1 text-xs text-slate-500">
+                {(ensureFfmpegMutation.data ?? validateFfmpegMutation.data)?.message}
+              </p>
+            ) : null}
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button
               size="sm"
               variant="secondary"
-              onClick={() => validateFfmpegMutation.mutate()}
-              disabled={validateFfmpegMutation.isPending}
+              onClick={() => ensureFfmpegMutation.mutate()}
+              disabled={ensureFfmpegMutation.isPending}
             >
-              验证并保存 FFmpeg
+              刷新检测
             </Button>
-            {validateFfmpegMutation.data ? (
-              <Badge tone={validateFfmpegMutation.data.valid ? "success" : "danger"}>
-                {validateFfmpegMutation.data.valid && validateFfmpegMutation.data.resolvedPath
-                  ? `已就绪：${validateFfmpegMutation.data.resolvedPath}`
-                  : validateFfmpegMutation.data.message}
-              </Badge>
-            ) : null}
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setShowAdvancedFfmpeg((value) => !value)}
+            >
+              {showAdvancedFfmpeg ? "隐藏高级路径" : "高级：手动指定路径"}
+            </Button>
           </div>
+          {showAdvancedFfmpeg ? (
+            <>
+              <Field label="FFmpeg 路径">
+                <Input
+                  value={draft.ffmpegPath}
+                  onChange={(event) => updateField("ffmpegPath", event.target.value)}
+                  onBlur={() => {
+                    if (!draft) return;
+                    persistDraft(draft);
+                  }}
+                />
+              </Field>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => validateFfmpegMutation.mutate()}
+                disabled={validateFfmpegMutation.isPending}
+              >
+                验证路径
+              </Button>
+            </>
+          ) : null}
         </CardBody>
       </Card>
 

@@ -143,6 +143,14 @@ export async function validateFfmpeg(path: string): Promise<FfmpegStatus> {
   return invoke<FfmpegStatus>("validate_ffmpeg", { path });
 }
 
+export async function ensureFfmpeg(): Promise<FfmpegStatus> {
+  return invoke<FfmpegStatus>("ensure_ffmpeg");
+}
+
+export async function countLibrary(): Promise<number> {
+  return invoke<number>("count_library");
+}
+
 export async function getAppPaths(): Promise<AppPaths> {
   return invoke<AppPaths>("get_app_paths");
 }

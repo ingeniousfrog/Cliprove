@@ -249,6 +249,7 @@ export interface AppSettings {
   saveAudio: boolean;
   saveSubtitles: boolean;
   clipboardDetect: boolean;
+  onboardingCompleted: boolean;
 }
 
 export interface SidecarHealth {

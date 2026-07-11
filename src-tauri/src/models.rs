@@ -234,6 +234,7 @@ pub struct AppSettings {
     pub save_audio: bool,
     pub save_subtitles: bool,
     pub clipboard_detect: bool,
+    pub onboarding_completed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -270,6 +271,7 @@ impl Default for AppSettings {
             save_audio: false,
             save_subtitles: true,
             clipboard_detect: false,
+            onboarding_completed: false,
         }
     }
 }

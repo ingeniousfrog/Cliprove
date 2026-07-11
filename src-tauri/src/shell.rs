@@ -49,18 +49,66 @@ pub fn read_text_file(path: &str, max_bytes: usize) -> AppResult<String> {
     std::fs::read_to_string(path).map_err(|error| AppError::Message(error.to_string()))
 }
 
+pub fn bundled_ffmpeg_path() -> Option<PathBuf> {
+    if let Ok(path) = std::env::var("CLIPROVE_BUNDLED_FFMPEG") {
+        let candidate = PathBuf::from(path);
+        if candidate.is_file() {
+            return candidate.canonicalize().ok().or(Some(candidate));
+        }
+    }
+
+    let exe = std::env::current_exe().ok()?;
+    let macos_dir = exe.parent()?.parent()?.join("Resources/ffmpeg");
+    if macos_dir.is_dir() {
+        if let Ok(target) = std::env::var("TARGET") {
+            let candidate = macos_dir.join(format!("ffmpeg-{target}"));
+            if candidate.is_file() {
+                return candidate.canonicalize().ok().or(Some(candidate));
+            }
+        }
+        for entry in std::fs::read_dir(&macos_dir).ok()?.flatten() {
+            let path = entry.path();
+            if path.is_file() && path.file_name()?.to_string_lossy().starts_with("ffmpeg-") {
+                return path.canonicalize().ok().or(Some(path));
+            }
+        }
+    }
+
+    if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
+        let dev_resources = PathBuf::from(manifest_dir).join("resources/ffmpeg");
+        if dev_resources.is_dir() {
+            if let Ok(target) = std::env::var("TARGET") {
+                let candidate = dev_resources.join(format!("ffmpeg-{target}"));
+                if candidate.is_file() {
+                    return candidate.canonicalize().ok().or(Some(candidate));
+                }
+            }
+        }
+    }
+
+    None
+}
+
+fn system_ffmpeg_candidates() -> Vec<PathBuf> {
+    vec![
+        PathBuf::from("/opt/homebrew/bin/ffmpeg"),
+        PathBuf::from("/usr/local/bin/ffmpeg"),
+        PathBuf::from("/usr/bin/ffmpeg"),
+        PathBuf::from("ffmpeg"),
+    ]
+}
+
 fn ffmpeg_candidates(path: &str) -> Vec<PathBuf> {
     let trimmed = path.trim();
-    if trimmed.is_empty() || trimmed == "ffmpeg" {
-        vec![
-            PathBuf::from("/opt/homebrew/bin/ffmpeg"),
-            PathBuf::from("/usr/local/bin/ffmpeg"),
-            PathBuf::from("/usr/bin/ffmpeg"),
-            PathBuf::from("ffmpeg"),
-        ]
-    } else {
-        vec![PathBuf::from(trimmed)]
+    let mut candidates = Vec::new();
+    if !trimmed.is_empty() && trimmed != "ffmpeg" {
+        candidates.push(PathBuf::from(trimmed));
     }
+    candidates.extend(system_ffmpeg_candidates());
+    if let Some(bundled) = bundled_ffmpeg_path() {
+        candidates.push(bundled);
+    }
+    candidates
 }
 
 pub fn resolve_ffmpeg_path(path: &str) -> Option<PathBuf> {

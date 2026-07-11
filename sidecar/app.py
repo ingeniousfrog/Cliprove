@@ -25,6 +25,7 @@ from platform_login.douyin_browser import start_douyin_browser_login
 from platforms.bilibili.service import bilibili_service
 from platforms.cover_url import normalize_cover_url, proxy_referer
 from platforms.douyin.service import douyin_service
+from platforms.errors import map_exception
 
 APP_VERSION = "0.5.0-phase5"
 job_manager = JobManager()
@@ -128,7 +129,8 @@ async def parse_media(request: ParseRequest) -> dict[str, Any]:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        mapped = map_exception(exc)
+        raise HTTPException(status_code=500, detail=str(mapped)) from mapped
 
 
 @app.post("/v1/download")
@@ -203,7 +205,8 @@ async def search_media(request: SearchRequest) -> dict[str, Any]:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        mapped = map_exception(exc)
+        raise HTTPException(status_code=500, detail=str(mapped)) from mapped
 
 
 @app.get("/v1/bilibili/preview/{bvid}")

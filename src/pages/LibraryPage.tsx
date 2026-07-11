@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import {
   Copy,
   ExternalLink,
@@ -20,6 +21,7 @@ import {
   deleteLibraryItem,
   deleteTag,
   listCollections,
+  countLibrary,
   listLibrary,
   listTags,
   openLocalFile,
@@ -92,6 +94,19 @@ export function LibraryPage() {
     if (tagId) value.tagId = tagId;
     return value;
   }, [query, platform, mediaType, dateRange, collectionId, tagId]);
+
+  const hasActiveFilters =
+    Boolean(query.trim()) ||
+    Boolean(platform) ||
+    Boolean(mediaType) ||
+    dateRange !== "all" ||
+    Boolean(collectionId) ||
+    Boolean(tagId);
+
+  const { data: totalCount = 0 } = useQuery({
+    queryKey: ["library-count"],
+    queryFn: countLibrary,
+  });
 
   const { data: items = [], isLoading } = useQuery({
     queryKey: ["library", filter],
@@ -324,7 +339,26 @@ export function LibraryPage() {
           {isLoading ? (
             <p className="text-sm text-slate-500">加载中…</p>
           ) : items.length === 0 ? (
-            <p className="text-sm text-slate-500">没有匹配的库条目</p>
+            totalCount === 0 && !hasActiveFilters ? (
+              <div className="flex flex-col items-center gap-3 py-12 text-center">
+                <p className="text-sm font-medium text-slate-700">还没有已下载内容</p>
+                <p className="max-w-md text-sm text-slate-500">
+                  在首页粘贴链接或搜索后下载，内容会自动出现在这里。
+                </p>
+                <div className="flex gap-2">
+                  <Link to="/">
+                    <Button size="sm">去首页</Button>
+                  </Link>
+                  <Link to="/search">
+                    <Button size="sm" variant="secondary">
+                      去搜索
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500">没有匹配的库条目</p>
+            )
           ) : viewMode === "grid" ? (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {items.map((item) => (

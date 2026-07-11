@@ -34,6 +34,7 @@
       "icons/icon.ico"
     ],
     "externalBin": ["binaries/cliprove-sidecar"],
+    "resources": ["resources/ffmpeg/*"],
     "macOS": {
       "minimumSystemVersion": "13.0"
     }
