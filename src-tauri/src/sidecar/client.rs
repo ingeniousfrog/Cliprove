@@ -153,7 +153,6 @@ pub struct SidecarJob {
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SidecarDownloadResult {
-    pub output_dir: String,
     pub media_paths: Vec<String>,
     pub cover_path: Option<String>,
     pub metadata_path: Option<String>,
