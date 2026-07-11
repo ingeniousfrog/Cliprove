@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from typing import Any
 
+from platforms.cover_url import normalize_cover_url
+
 
 def _best_thumbnail(info: dict[str, Any]) -> str | None:
     thumbs = info.get("thumbnails") or []
     if thumbs:
-        return thumbs[-1].get("url")
-    return info.get("thumbnail")
+        url = thumbs[-1].get("url")
+        return normalize_cover_url(url if isinstance(url, str) else None)
+    return normalize_cover_url(info.get("thumbnail") if isinstance(info.get("thumbnail"), str) else None)
 
 
 def _quality_options(info: dict[str, Any]) -> list[dict[str, Any]]:
@@ -169,9 +172,11 @@ def search_result_to_media_item(
         author_id = str(result.get("mid") or "unknown")
 
     duration_sec = _parse_duration(result.get("duration"))
-    pic = result.get("pic") or result.get("cover")
-    if isinstance(pic, str) and pic.startswith("//"):
-        pic = f"https:{pic}"
+    pic = normalize_cover_url(
+        result.get("pic") if isinstance(result.get("pic"), str) else None
+    ) or normalize_cover_url(
+        result.get("cover") if isinstance(result.get("cover"), str) else None
+    )
 
     return {
         "platform": "bilibili",

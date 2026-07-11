@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from .bootstrap import ensure_engine_path
+from .constants import DOUYIN_USER_AGENT
 
 ensure_engine_path()
 
@@ -13,6 +14,7 @@ from core.url_parser import URLParser  # noqa: E402
 from utils.validators import is_short_url, normalize_short_url, parse_url_type  # noqa: E402
 
 from .downloader import cookies_dict, download_aweme
+from .constants import DOUYIN_USER_AGENT
 from .mapper import aweme_to_media_item, aweme_to_parsed_media
 
 
@@ -35,7 +37,11 @@ class DouyinService:
         cookie_map = cookies_dict(cookies)
         resolved_url = url.strip()
 
-        async with DouyinAPIClient(cookie_map, proxy=proxy or None) as api_client:
+        async with DouyinAPIClient(
+            cookie_map,
+            proxy=proxy or None,
+            user_agent=DOUYIN_USER_AGENT,
+        ) as api_client:
             if is_short_url(resolved_url):
                 resolved = await api_client.resolve_short_url(normalize_short_url(resolved_url))
                 if not resolved:
@@ -91,7 +97,11 @@ class DouyinService:
             0,
         )
 
-        async with DouyinAPIClient(cookie_map, proxy=proxy or None) as api_client:
+        async with DouyinAPIClient(
+            cookie_map,
+            proxy=proxy or None,
+            user_agent=DOUYIN_USER_AGENT,
+        ) as api_client:
             try:
                 page = await api_client.search_aweme(
                     keyword,
@@ -159,7 +169,11 @@ class DouyinService:
                 "message": "未配置 Cookie",
             }
 
-        async with DouyinAPIClient(cookie_map, proxy=proxy or None) as api_client:
+        async with DouyinAPIClient(
+            cookie_map,
+            proxy=proxy or None,
+            user_agent=DOUYIN_USER_AGENT,
+        ) as api_client:
             try:
                 info = await api_client.get_self_info()
             except LoginRequiredError:

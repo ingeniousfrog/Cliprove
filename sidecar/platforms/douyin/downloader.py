@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .bootstrap import ensure_engine_path
+from .constants import DOUYIN_USER_AGENT
 
 ensure_engine_path()
 
@@ -141,7 +142,11 @@ async def download_aweme(
     if cookie_map:
         cookie_manager.set_cookies(cookie_map)
 
-    async with DouyinAPIClient(cookie_map, proxy=proxy or None) as api_client:
+    async with DouyinAPIClient(
+        cookie_map,
+        proxy=proxy or None,
+        user_agent=DOUYIN_USER_AGENT,
+    ) as api_client:
         aweme = await api_client.get_video_detail(aweme_id)
         if not aweme:
             raise RuntimeError(f"无法获取作品详情: {aweme_id}")

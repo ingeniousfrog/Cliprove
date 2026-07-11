@@ -12,6 +12,7 @@ from typing import Any
 import yt_dlp
 
 from platforms.cookies import write_netscape_cookie_file
+from platforms.cover_url import normalize_cover_url
 
 
 def _format_selector(quality_id: str | None) -> str:
@@ -36,7 +37,7 @@ def _selected_parts(asset_ids: list[str]) -> set[str]:
 def _best_thumbnail(info: dict[str, Any]) -> str | None:
     thumbnail = info.get("thumbnail")
     if isinstance(thumbnail, str) and thumbnail:
-        return thumbnail
+        return normalize_cover_url(thumbnail)
 
     thumbnails = info.get("thumbnails") or []
     if thumbnails:
@@ -44,7 +45,7 @@ def _best_thumbnail(info: dict[str, Any]) -> str | None:
             if isinstance(entry, dict):
                 url = entry.get("url")
                 if isinstance(url, str) and url:
-                    return url
+                    return normalize_cover_url(url)
     return None
 
 

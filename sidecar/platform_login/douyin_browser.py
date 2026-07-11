@@ -8,18 +8,31 @@ from typing import Any
 
 from platforms.cookies import cookies_dict_to_header
 from platforms.douyin.bootstrap import ensure_engine_path
+from platforms.douyin.constants import (
+    DOUYIN_USER_AGENT,
+    SEARCH_WARMUP_KEYWORD,
+    SEARCH_WARMUP_URL,
+)
 
 from .sessions import AuthLoginSession
 
 ensure_engine_path()
 
-from tools.cookie_fetcher import filter_cookies, try_extract_ms_token  # noqa: E402
+from core.api_client import DouyinAPIClient  # noqa: E402
+from tools.cookie_fetcher import (  # noqa: E402
+    DEFAULT_AUXILIARY_KEYS,
+    DEFAULT_AUXILIARY_PREFIXES,
+    SUGGESTED_KEYS,
+    extract_ms_token_from_text,
+    filter_cookies,
+    try_extract_ms_token,
+)
 from utils.cookie_utils import sanitize_cookies  # noqa: E402
 
-LOGIN_URL = "https://www.douyin.com/passport/web/login/"
 HOME_URL = "https://www.douyin.com/"
 LOGIN_TIMEOUT_SEC = 300
 POLL_INTERVAL_SEC = 2.5
+SEARCH_PROBE_ATTEMPTS = 4
 
 _BROWSER_ARGS = [
     "--disable-blink-features=AutomationControlled",
@@ -27,10 +40,19 @@ _BROWSER_ARGS = [
     "--no-default-browser-check",
 ]
 
-_USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/131.0.0.0 Safari/537.36"
+_STEALTH_INIT_SCRIPT = """
+Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+window.chrome = window.chrome || { runtime: {} };
+"""
+
+_LOGIN_BUTTON_SELECTORS = (
+    'button:has-text("登录")',
+    'p:has-text("登录")',
+    'span:has-text("登录")',
+    'div:has-text("登录")',
+    'a:has-text("登录")',
+    '[class*="login-button"]',
+    '[id*="login"]',
 )
 
 
@@ -49,10 +71,71 @@ def _cookies_from_storage(storage: dict[str, Any]) -> dict[str, str]:
     return sanitize_cookies(cookies)
 
 
+def _merge_cookie_sets(full: dict[str, str], picked: dict[str, str]) -> dict[str, str]:
+    merged = dict(picked)
+    for key, value in full.items():
+        if key in merged:
+            continue
+        if key in SUGGESTED_KEYS or key in DEFAULT_AUXILIARY_KEYS:
+            merged[key] = value
+            continue
+        if any(key.startswith(prefix) for prefix in DEFAULT_AUXILIARY_PREFIXES):
+            merged[key] = value
+    return sanitize_cookies(merged)
+
+
 async def _close_browser(browser: Any) -> None:
     try:
         if browser.is_connected():
             await browser.close()
+    except Exception:  # noqa: BLE001
+        pass
+
+
+async def _launch_browser(playwright: Any) -> Any:
+    for channel in ("chrome", "msedge", None):
+        try:
+            kwargs: dict[str, Any] = {
+                "headless": False,
+                "args": _BROWSER_ARGS,
+                "ignore_default_args": ["--enable-automation"],
+            }
+            if channel:
+                kwargs["channel"] = channel
+            return await playwright.chromium.launch(**kwargs)
+        except Exception:  # noqa: BLE001
+            continue
+    raise RuntimeError("无法启动浏览器，请安装 Chrome 或运行 playwright install chromium")
+
+
+async def _open_login_flow(page: Any) -> bool:
+    """Open Douyin homepage and try to surface the login UI."""
+    await page.goto(HOME_URL, wait_until="domcontentloaded", timeout=60_000)
+    await asyncio.sleep(1.5)
+
+    for selector in _LOGIN_BUTTON_SELECTORS:
+        try:
+            target = page.locator(selector).first
+            if await target.is_visible(timeout=1_500):
+                await target.click(timeout=3_000)
+                await asyncio.sleep(1)
+                return True
+        except Exception:  # noqa: BLE001
+            continue
+
+    return False
+
+
+async def _warmup_search_credentials(page: Any) -> None:
+    try:
+        await page.goto(HOME_URL, wait_until="domcontentloaded", timeout=60_000)
+        await asyncio.sleep(2)
+        await page.goto(SEARCH_WARMUP_URL, wait_until="domcontentloaded", timeout=60_000)
+        await asyncio.sleep(3)
+        await page.mouse.wheel(0, 900)
+        await asyncio.sleep(2)
+        await page.mouse.wheel(0, 900)
+        await asyncio.sleep(2)
     except Exception:  # noqa: BLE001
         pass
 
@@ -63,15 +146,13 @@ async def _collect_login_cookies(
     observed_cookie_headers: list[str],
     observed_mstokens: list[str],
 ) -> dict[str, str]:
-    try:
-        await page.goto(HOME_URL, wait_until="domcontentloaded", timeout=60_000)
-    except Exception:  # noqa: BLE001
-        pass
-
-    await asyncio.sleep(2.5)
+    await _warmup_search_credentials(page)
 
     storage = await context.storage_state()
-    cookies = _cookies_from_storage(storage)
+    full = _cookies_from_storage(storage)
+    cookies = filter_cookies(full)
+    cookies = _merge_cookie_sets(full, cookies)
+
     ms_token = await try_extract_ms_token(
         page,
         cookies,
@@ -81,7 +162,48 @@ async def _collect_login_cookies(
     if ms_token and not cookies.get("msToken"):
         cookies["msToken"] = ms_token
 
-    return filter_cookies(cookies)
+    return cookies
+
+
+async def _probe_search(cookie_map: dict[str, str]) -> bool:
+    try:
+        async with DouyinAPIClient(
+            cookie_map,
+            user_agent=DOUYIN_USER_AGENT,
+        ) as client:
+            result = await client.search_aweme(SEARCH_WARMUP_KEYWORD, count=3)
+            return bool(result.get("items"))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+async def _finalize_login_cookies(
+    session: AuthLoginSession,
+    context: Any,
+    page: Any,
+    observed_cookie_headers: list[str],
+    observed_mstokens: list[str],
+) -> dict[str, str] | None:
+    for attempt in range(SEARCH_PROBE_ATTEMPTS):
+        session.message = (
+            f"登录成功，正在收集搜索凭证（{attempt + 1}/{SEARCH_PROBE_ATTEMPTS}）…"
+            "请勿关闭浏览器"
+        )
+        cookies = await _collect_login_cookies(
+            context,
+            page,
+            observed_cookie_headers,
+            observed_mstokens,
+        )
+        if not cookies.get("sessionid"):
+            return None
+
+        if await _probe_search(cookies):
+            return cookies
+
+        await asyncio.sleep(3)
+
+    return cookies
 
 
 async def _run_douyin_browser_login(session: AuthLoginSession) -> None:
@@ -104,16 +226,13 @@ async def _run_douyin_browser_login(session: AuthLoginSession) -> None:
 
     try:
         async with async_playwright() as playwright:
-            browser = await playwright.chromium.launch(
-                headless=False,
-                args=_BROWSER_ARGS,
-                ignore_default_args=["--enable-automation"],
-            )
+            browser = await _launch_browser(playwright)
             context = await browser.new_context(
-                user_agent=_USER_AGENT,
+                user_agent=DOUYIN_USER_AGENT,
                 viewport={"width": 1280, "height": 800},
                 locale="zh-CN",
             )
+            await context.add_init_script(_STEALTH_INIT_SCRIPT)
             page = await context.new_page()
 
             def _on_request(request: Any) -> None:
@@ -124,8 +243,6 @@ async def _run_douyin_browser_login(session: AuthLoginSession) -> None:
                         observed_cookie_headers.append(cookie_header)
                     url = request.url or ""
                     if "msToken=" in url:
-                        from tools.cookie_fetcher import extract_ms_token_from_text
-
                         token = extract_ms_token_from_text(url)
                         if token:
                             observed_mstokens.append(token)
@@ -135,11 +252,17 @@ async def _run_douyin_browser_login(session: AuthLoginSession) -> None:
             page.on("request", _on_request)
 
             try:
-                await page.goto(LOGIN_URL, wait_until="domcontentloaded", timeout=60_000)
+                clicked = await _open_login_flow(page)
             except Exception:  # noqa: BLE001
-                pass
+                clicked = False
 
-            session.message = "已打开登录窗口，请完成抖音登录（可扫码）"
+            if clicked:
+                session.message = "已打开登录窗口，请在弹出的登录框中完成扫码"
+            else:
+                session.message = (
+                    "已打开抖音首页，请点击右上角「登录」完成扫码；"
+                    "登录后请等待首页加载完成"
+                )
 
             deadline = time.time() + LOGIN_TIMEOUT_SEC
             while time.time() < deadline:
@@ -151,21 +274,27 @@ async def _run_douyin_browser_login(session: AuthLoginSession) -> None:
                 storage = await context.storage_state()
                 cookies = _cookies_from_storage(storage)
                 if cookies.get("sessionid"):
-                    session.message = "登录成功，正在收集搜索所需凭证…"
-                    cookies = await _collect_login_cookies(
+                    cookies = await _finalize_login_cookies(
+                        session,
                         context,
                         page,
                         observed_cookie_headers,
                         observed_mstokens,
                     )
-                    if not cookies.get("sessionid"):
+                    if not cookies or not cookies.get("sessionid"):
                         session.status = "failed"
                         session.message = "登录完成但未获取到有效 Cookie，请重试"
                         return
 
                     session.cookies = cookies_dict_to_header(cookies)
                     session.status = "completed"
-                    session.message = "抖音登录成功"
+                    if await _probe_search(cookies):
+                        session.message = "抖音登录成功，搜索凭证已就绪"
+                    else:
+                        session.message = (
+                            "抖音登录成功，但搜索凭证可能仍受限。"
+                            "请稍后在设置中点击「验证登录状态」重试"
+                        )
                     await _close_browser(browser)
                     browser = None
                     return

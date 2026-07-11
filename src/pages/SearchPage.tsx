@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { CoverImage } from "@/components/media/CoverImage";
+import { MediaPreviewDialog } from "@/components/media/MediaPreviewDialog";
 import { enqueueDownload, searchMedia } from "@/lib/tauri";
 import { cn, formatDuration, formatInvokeError, platformLabel } from "@/lib/utils";
 import type { MediaItem, Platform, SearchPage } from "@/types";
@@ -49,6 +51,7 @@ export function SearchPage() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [previewItem, setPreviewItem] = useState<MediaItem | null>(null);
   const queryClient = useQueryClient();
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -351,6 +354,7 @@ export function SearchPage() {
                       item={item}
                       active={selected.includes(item.platformItemId)}
                       onToggle={() => toggle(item.platformItemId)}
+                      onPreview={() => setPreviewItem(item)}
                     />
                   ))}
                 </div>
@@ -415,6 +419,8 @@ export function SearchPage() {
           </Button>
         </div>
       ) : null}
+
+      <MediaPreviewDialog item={previewItem} onClose={() => setPreviewItem(null)} />
     </div>
   );
 }
@@ -452,15 +458,15 @@ function ResultCard({
   item,
   active,
   onToggle,
+  onPreview,
 }: {
   item: MediaItem;
   active: boolean;
   onToggle: () => void;
+  onPreview: () => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onToggle}
+    <div
       className={cn(
         "rounded-lg border p-3 text-left transition-colors",
         active
@@ -468,17 +474,25 @@ function ResultCard({
           : "border-slate-200 bg-white hover:border-slate-300"
       )}
     >
-      <div className="mb-2 aspect-video overflow-hidden rounded-md bg-slate-100">
-        {item.coverUrl ? (
-          <img src={item.coverUrl} alt="" className="h-full w-full object-cover" />
-        ) : null}
-      </div>
-      <div className="line-clamp-2 text-sm font-medium">{item.title}</div>
-      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-        <Badge>{platformLabel(item.platform)}</Badge>
-        <span>{item.author.name}</span>
-        <span>{formatDuration(item.durationSec)}</span>
-      </div>
-    </button>
+      <button
+        type="button"
+        className="mb-2 block w-full overflow-hidden rounded-md"
+        onClick={onPreview}
+      >
+        <CoverImage
+          src={item.coverUrl}
+          platform={item.platform}
+          className="aspect-video w-full"
+        />
+      </button>
+      <button type="button" className="w-full text-left" onClick={onToggle}>
+        <div className="line-clamp-2 text-sm font-medium">{item.title}</div>
+        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+          <Badge>{platformLabel(item.platform)}</Badge>
+          <span>{item.author.name}</span>
+          <span>{formatDuration(item.durationSec)}</span>
+        </div>
+      </button>
+    </div>
   );
 }

@@ -5,6 +5,8 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { TaskActionButtons } from "@/components/tasks/TaskActionButtons";
+import { CoverImage } from "@/components/media/CoverImage";
+import { MediaPreviewDialog } from "@/components/media/MediaPreviewDialog";
 import { detectAdapter } from "@/adapters";
 import { useTaskActions } from "@/hooks/useTaskActions";
 import { enqueueDownload, getSettings, listTasks, parseLink } from "@/lib/tauri";
@@ -15,7 +17,7 @@ import {
   platformLabel,
   statusLabel,
 } from "@/lib/utils";
-import type { DownloadOptions } from "@/types";
+import type { DownloadOptions, MediaItem } from "@/types";
 
 export function HomePage() {
   const [url, setUrl] = useState("");
@@ -25,6 +27,7 @@ export function HomePage() {
   const { parsedMedia, setParsedMedia } = useAppStore();
   const { pendingAction, runAction } = useTaskActions();
   const [pasting, setPasting] = useState(false);
+  const [previewItem, setPreviewItem] = useState<MediaItem | null>(null);
 
   const detected = url.trim() ? detectAdapter(url.trim()) : undefined;
 
@@ -166,19 +169,17 @@ export function HomePage() {
           />
           <CardBody className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="overflow-hidden rounded-md border border-slate-200 bg-slate-100">
-                {parsedMedia.item.coverUrl ? (
-                  <img
-                    src={parsedMedia.item.coverUrl}
-                    alt=""
-                    className="h-44 w-full object-cover"
-                  />
-                ) : (
-                  <div className="flex h-44 items-center justify-center text-sm text-slate-400">
-                    无封面预览
-                  </div>
-                )}
-              </div>
+              <button
+                type="button"
+                className="overflow-hidden rounded-md border border-slate-200 text-left transition-colors hover:border-slate-300"
+                onClick={() => setPreviewItem(parsedMedia.item)}
+              >
+                <CoverImage
+                  src={parsedMedia.item.coverUrl}
+                  platform={parsedMedia.item.platform}
+                  className="h-44 w-full"
+                />
+              </button>
               <div className="space-y-2 text-sm text-slate-600">
                 <div>时长：{formatDuration(parsedMedia.item.durationSec)}</div>
                 <div>类型：{parsedMedia.item.mediaType}</div>
@@ -231,7 +232,13 @@ export function HomePage() {
               </div>
             ) : null}
 
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => setPreviewItem(parsedMedia.item)}
+              >
+                预览
+              </Button>
               <Button
                 loading={downloadMutation.isPending}
                 onClick={() => downloadMutation.mutate()}
@@ -288,6 +295,8 @@ export function HomePage() {
           )}
         </CardBody>
       </Card>
+
+      <MediaPreviewDialog item={previewItem} onClose={() => setPreviewItem(null)} />
     </div>
   );
 }

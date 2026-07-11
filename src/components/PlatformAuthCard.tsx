@@ -46,7 +46,11 @@ export function PlatformAuthCard({
   const validateMutation = useMutation({
     mutationFn: () => validatePlatformAuth(platform),
     onSuccess: (status) => {
-      setConfigured(status.valid || Boolean(draft[cookieField].trim()));
+      const hasCookies = Boolean(draft[cookieField].trim());
+      setConfigured(status.valid && hasCookies);
+      if (!status.valid) {
+        setLoginMessage(null);
+      }
     },
   });
 
@@ -70,8 +74,6 @@ export function PlatformAuthCard({
       savingRef.current = false;
       onDraftChange(settings);
       onSaved(settings);
-      setConfigured(true);
-      setLoginMessage("登录成功，凭证已自动保存");
       validateMutation.mutate();
     },
     onError: (error) => {
@@ -81,8 +83,13 @@ export function PlatformAuthCard({
   });
 
   useEffect(() => {
-    setConfigured(Boolean(draft[cookieField].trim()));
-  }, [cookieField, draft]);
+    const hasCookies = Boolean(draft[cookieField].trim());
+    if (validateMutation.data) {
+      setConfigured(validateMutation.data.valid && hasCookies);
+      return;
+    }
+    setConfigured(hasCookies);
+  }, [cookieField, draft, validateMutation.data]);
 
   useEffect(() => {
     if (!loginSession || TERMINAL_STATUSES.has(loginSession.status)) {
@@ -149,8 +156,24 @@ export function PlatformAuthCard({
           <div className="text-sm font-medium text-slate-800">{title}</div>
           <p className="mt-1 text-xs text-slate-500">{description}</p>
         </div>
-        <Badge tone={configured ? "success" : "default"}>
-          {configured ? "已配置" : "未配置"}
+        <Badge
+          tone={
+            validateMutation.data?.valid
+              ? "success"
+              : validateMutation.data && draft[cookieField].trim()
+                ? "warning"
+                : configured
+                  ? "success"
+                  : "default"
+          }
+        >
+          {validateMutation.data?.valid
+            ? "已配置"
+            : validateMutation.data && draft[cookieField].trim()
+              ? "搜索受限"
+              : configured
+                ? "已配置"
+                : "未配置"}
         </Badge>
       </div>
 
@@ -198,16 +221,8 @@ export function PlatformAuthCard({
         </div>
       ) : null}
 
-      {loginMessage && !loginSession?.qrImageBase64 ? (
-        <p
-          className={
-            validateMutation.data?.valid === false && !isLoginActive
-              ? "text-xs text-red-600"
-              : "text-xs text-slate-500"
-          }
-        >
-          {loginMessage}
-        </p>
+      {loginMessage && !loginSession?.qrImageBase64 && !validateMutation.data ? (
+        <p className="text-xs text-slate-500">{loginMessage}</p>
       ) : null}
 
       {validateMutation.data ? (

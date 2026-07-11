@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from platforms.cover_url import normalize_cover_url
+
 from .bootstrap import ensure_engine_path
 
 ensure_engine_path()
@@ -57,7 +59,7 @@ def aweme_to_media_item(
         "durationSec": int((video.get("duration") or 0) // 1000)
         if video.get("duration")
         else None,
-        "coverUrl": _first_url(cover_source),
+        "coverUrl": normalize_cover_url(_first_url(cover_source)),
         "searchKeyword": search_keyword,
     }
 

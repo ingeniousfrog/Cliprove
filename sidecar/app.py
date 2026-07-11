@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import argparse
 import re
+import urllib.request
 from typing import Any
+from urllib.parse import unquote
 
 try:
     from fastapi import FastAPI, HTTPException
+    from fastapi.responses import Response
     from pydantic import BaseModel, Field
     import uvicorn
 except ImportError as exc:  # pragma: no cover
@@ -20,6 +23,7 @@ from platform_login.sessions import auth_session_manager
 from platform_login.bilibili_qr import poll_bilibili_qr_login, start_bilibili_qr_login
 from platform_login.douyin_browser import start_douyin_browser_login
 from platforms.bilibili.service import bilibili_service
+from platforms.cover_url import normalize_cover_url, proxy_referer
 from platforms.douyin.service import douyin_service
 
 APP_VERSION = "0.5.0-phase5"
@@ -74,6 +78,33 @@ class SearchRequest(BaseModel):
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "version": APP_VERSION}
+
+
+@app.get("/v1/proxy/image")
+def proxy_image(url: str, platform: str = "") -> Response:
+    normalized = normalize_cover_url(unquote(url))
+    if not normalized or not normalized.startswith("https://"):
+        raise HTTPException(status_code=400, detail="invalid image url")
+
+    request = urllib.request.Request(
+        normalized,
+        headers={
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/131.0.0.0 Safari/537.36"
+            ),
+            "Referer": proxy_referer(normalized, platform),
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            body = response.read()
+            content_type = response.headers.get("Content-Type", "image/jpeg")
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"image fetch failed: {exc}") from exc
+
+    return Response(content=body, media_type=content_type.split(";")[0])
 
 
 @app.post("/v1/parse")

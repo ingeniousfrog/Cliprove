@@ -24,4 +24,7 @@ def ensure_engine_path() -> Path:
             f"douyin-downloader engine not found at {ENGINE_ROOT}. "
             "Run: git submodule update --init --recursive"
         )
+    from .engine_patches import apply_douyin_engine_patches
+
+    apply_douyin_engine_patches()
     return ENGINE_ROOT
