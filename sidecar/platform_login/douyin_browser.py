@@ -205,7 +205,8 @@ async def _finalize_login_cookies(
 
         session.message = (
             "已登录，但抖音搜索仍在平台验证或风控中。"
-            "如果浏览器出现答题、滑块或其他验证，请完成验证并等待搜索页加载出结果"
+            "如果浏览器出现答题、滑块或其他验证，请完成验证并等待搜索页加载出结果；"
+            "只有搜索探测通过后才会保存新的 Cookie"
         )
 
         await asyncio.sleep(3)
@@ -312,11 +313,10 @@ async def _run_douyin_browser_login(session: AuthLoginSession) -> None:
                 await asyncio.sleep(POLL_INTERVAL_SEC)
 
             if last_login_cookies and last_login_cookies.get("sessionid"):
-                session.cookies = cookies_dict_to_header(last_login_cookies)
-                session.status = "completed"
+                session.status = "failed"
                 session.message = (
-                    "抖音登录已保存，但搜索仍受平台验证限制。"
-                    "如需搜索，请重新登录并在浏览器内完成弹出的验证"
+                    "已登录，但搜索验证没有通过，未覆盖保存新的 Cookie。"
+                    "请重新登录，并在浏览器里完成答题、滑块等验证直到搜索结果正常加载"
                 )
                 return
 
