@@ -6,9 +6,10 @@ use crate::app_state::AppState;
 use crate::errors::{AppError, AppResult};
 use crate::mock;
 use crate::models::{
-    AppSettings, AuthStatus, DownloadOptions, DownloadSpec, DownloadTask, LibraryItem,
-    MediaItem, ParsedMedia, SearchPage, SidecarHealth,
+    AppSettings, AuthStatus, Collection, DownloadOptions, DownloadSpec, DownloadTask,
+    LibraryFilter, LibraryItem, MediaItem, ParsedMedia, SearchPage, SidecarHealth, Tag,
 };
+use crate::shell;
 use crate::tasks;
 
 fn is_douyin_url(url: &str) -> bool {
@@ -34,7 +35,7 @@ fn ensure_sidecar(state: &AppState, platform: &str) -> AppResult<()> {
 }
 
 #[tauri::command]
-pub fn parse_link(state: State<AppState>, url: String) -> Result<ParsedMedia, String> {
+pub fn parse_link(state: State<Arc<AppState>>, url: String) -> Result<ParsedMedia, String> {
     run(|| {
         if is_douyin_url(&url) || is_bilibili_url(&url) {
             let settings = state.db.settings().get_all()?;
@@ -47,7 +48,7 @@ pub fn parse_link(state: State<AppState>, url: String) -> Result<ParsedMedia, St
 
 #[tauri::command]
 pub fn search_media(
-    state: State<AppState>,
+    state: State<Arc<AppState>>,
     platform: String,
     query: crate::models::SearchQuery,
     cursor: Option<String>,
@@ -67,7 +68,7 @@ pub fn search_media(
 
 #[tauri::command]
 pub fn create_download_spec(
-    _state: State<AppState>,
+    _state: State<Arc<AppState>>,
     item: MediaItem,
     options: DownloadOptions,
 ) -> Result<DownloadSpec, String> {
@@ -77,7 +78,7 @@ pub fn create_download_spec(
 #[tauri::command]
 pub fn enqueue_download(
     app: tauri::AppHandle,
-    state: State<AppState>,
+    state: State<Arc<AppState>>,
     item: MediaItem,
     options: DownloadOptions,
 ) -> Result<String, String> {
@@ -113,8 +114,7 @@ pub fn enqueue_download(
 
         tasks::spawn_task(
             app,
-            Arc::clone(&state.db),
-            Arc::clone(&state.sidecar),
+            Arc::clone(state.inner()),
             task.id.clone(),
             item,
             output_dir,
@@ -126,73 +126,79 @@ pub fn enqueue_download(
 }
 
 #[tauri::command]
-pub fn list_tasks(state: State<AppState>) -> Result<Vec<DownloadTask>, String> {
+pub fn list_tasks(state: State<Arc<AppState>>) -> Result<Vec<DownloadTask>, String> {
     run(|| state.db.tasks().list())
 }
 
 #[tauri::command]
 pub fn task_action(
     app: tauri::AppHandle,
-    state: State<AppState>,
+    state: State<Arc<AppState>>,
     task_id: String,
     action: String,
 ) -> Result<(), String> {
     run(|| {
         match action.as_str() {
             "cancel" => state.db.tasks().mark_cancelled(&task_id)?,
-            "retry" => {
-                state.db.tasks().mark_retry(&task_id)?;
-                if let Some(task) = state.db.tasks().get(&task_id)? {
-                    let settings = state.db.settings().get_all()?;
-                    let output_dir = task.output_dir.clone().unwrap_or_else(|| {
-                        format!(
-                            "{}/{}/{}",
-                            settings.download_directory, task.platform, task.platform_item_id
-                        )
+            "retry" | "resume" => {
+                let payload = state
+                    .db
+                    .tasks()
+                    .get_payload(&task_id)?
+                    .ok_or_else(|| AppError::Message("任务不存在".to_string()))?;
+
+                let item: MediaItem = payload
+                    .item_json
+                    .as_deref()
+                    .and_then(|value| serde_json::from_str(value).ok())
+                    .ok_or_else(|| AppError::Message("任务缺少媒体信息，无法恢复".to_string()))?;
+
+                let options: DownloadOptions = payload
+                    .options_json
+                    .as_deref()
+                    .and_then(|value| serde_json::from_str(value).ok())
+                    .unwrap_or(DownloadOptions {
+                        assets: vec![
+                            "video".to_string(),
+                            "cover".to_string(),
+                            "metadata".to_string(),
+                        ],
+                        quality_id: None,
+                        save_cover: Some(true),
+                        save_audio: None,
+                        save_metadata: Some(true),
+                        save_subtitles: None,
+                        force_replace: Some(true),
                     });
-                    let item = MediaItem {
-                        platform: task.platform.clone(),
-                        platform_item_id: task.platform_item_id.clone(),
-                        original_url: output_dir.clone(),
-                        canonical_url: output_dir.clone(),
-                        title: task.title.clone(),
-                        description: None,
-                        author: crate::models::Author {
-                            id: "retry".to_string(),
-                            name: "Retry".to_string(),
-                            avatar_url: None,
-                        },
-                        published_at: None,
-                        media_type: "video".to_string(),
-                        duration_sec: None,
-                        cover_url: None,
-                        search_keyword: None,
-                    };
-                    ensure_sidecar(&state, &item.platform)?;
-                    tasks::spawn_task(
-                        app,
-                        Arc::clone(&state.db),
-                        Arc::clone(&state.sidecar),
-                        task_id,
-                        item,
-                        output_dir,
-                        DownloadOptions {
-                            assets: vec![
-                                "video".to_string(),
-                                "cover".to_string(),
-                                "metadata".to_string(),
-                            ],
-                            quality_id: None,
-                            save_cover: Some(true),
-                            save_audio: None,
-                            save_metadata: Some(true),
-                            save_subtitles: None,
-                            force_replace: Some(true),
-                        },
-                    );
+
+                let settings = state.db.settings().get_all()?;
+                let output_dir = payload.output_dir.clone().unwrap_or_else(|| {
+                    format!(
+                        "{}/{}/{}/{}",
+                        settings.download_directory,
+                        item.platform,
+                        item.author.id,
+                        item.platform_item_id
+                    )
+                });
+
+                if action == "retry" {
+                    state.db.tasks().mark_retry(&task_id)?;
+                } else {
+                    state.db.tasks().mark_resume(&task_id)?;
                 }
+
+                ensure_sidecar(&state, &item.platform)?;
+                tasks::spawn_task(
+                    app,
+                    Arc::clone(state.inner()),
+                    task_id,
+                    item,
+                    output_dir,
+                    options,
+                );
             }
-            "pause" | "resume" => {}
+            "pause" => {}
             _ => {
                 return Err(AppError::Message(format!("unsupported action: {action}")));
             }
@@ -202,18 +208,147 @@ pub fn task_action(
 }
 
 #[tauri::command]
-pub fn list_library(state: State<AppState>, query: Option<String>) -> Result<Vec<LibraryItem>, String> {
-    run(|| state.db.library().list(query.as_deref()))
+pub fn list_library(
+    state: State<Arc<AppState>>,
+    filter: Option<LibraryFilter>,
+) -> Result<Vec<LibraryItem>, String> {
+    run(|| state.db.library().list(&filter.unwrap_or_default()))
 }
 
 #[tauri::command]
-pub fn get_settings(state: State<AppState>) -> Result<AppSettings, String> {
+pub fn get_library_item(state: State<Arc<AppState>>, id: String) -> Result<LibraryItem, String> {
+    run(|| {
+        state
+            .db
+            .library()
+            .get(&id)?
+            .ok_or_else(|| AppError::Message("库条目不存在".to_string()))
+    })
+}
+
+#[tauri::command]
+pub fn delete_library_item(
+    state: State<Arc<AppState>>,
+    id: String,
+    delete_files: bool,
+) -> Result<(), String> {
+    run(|| state.db.library().delete(&id, delete_files))
+}
+
+#[tauri::command]
+pub fn list_tags(state: State<Arc<AppState>>) -> Result<Vec<Tag>, String> {
+    run(|| state.db.tags().list())
+}
+
+#[tauri::command]
+pub fn create_tag(state: State<Arc<AppState>>, name: String) -> Result<Tag, String> {
+    run(|| state.db.tags().create(&name))
+}
+
+#[tauri::command]
+pub fn delete_tag(state: State<Arc<AppState>>, id: String) -> Result<(), String> {
+    run(|| state.db.tags().delete(&id))
+}
+
+#[tauri::command]
+pub fn set_library_tags(
+    state: State<Arc<AppState>>,
+    library_item_id: String,
+    tag_ids: Vec<String>,
+) -> Result<Vec<String>, String> {
+    run(|| {
+        let tags = state.db.tags().set_for_item(&library_item_id, &tag_ids)?;
+        state.db.library().refresh_fts_tags(&library_item_id)?;
+        Ok(tags.into_iter().map(|tag| tag.name).collect())
+    })
+}
+
+#[tauri::command]
+pub fn list_collections(state: State<Arc<AppState>>) -> Result<Vec<Collection>, String> {
+    run(|| state.db.collections().list())
+}
+
+#[tauri::command]
+pub fn create_collection(state: State<Arc<AppState>>, name: String) -> Result<Collection, String> {
+    run(|| state.db.collections().create(&name))
+}
+
+#[tauri::command]
+pub fn rename_collection(
+    state: State<Arc<AppState>>,
+    id: String,
+    name: String,
+) -> Result<Collection, String> {
+    run(|| state.db.collections().rename(&id, &name))
+}
+
+#[tauri::command]
+pub fn delete_collection(state: State<Arc<AppState>>, id: String) -> Result<(), String> {
+    run(|| state.db.collections().delete(&id))
+}
+
+#[tauri::command]
+pub fn add_to_collection(
+    state: State<Arc<AppState>>,
+    collection_id: String,
+    library_item_id: String,
+) -> Result<(), String> {
+    run(|| {
+        state
+            .db
+            .collections()
+            .add_item(&collection_id, &library_item_id)
+    })
+}
+
+#[tauri::command]
+pub fn remove_from_collection(
+    state: State<Arc<AppState>>,
+    collection_id: String,
+    library_item_id: String,
+) -> Result<(), String> {
+    run(|| {
+        state
+            .db
+            .collections()
+            .remove_item(&collection_id, &library_item_id)
+    })
+}
+
+#[tauri::command]
+pub fn reveal_in_finder(path: String) -> Result<(), String> {
+    run(|| shell::reveal_in_finder(&path))
+}
+
+#[tauri::command]
+pub fn open_local_file(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    run(|| tasks::open_path(&app, &path))
+}
+
+#[tauri::command]
+pub fn read_local_file(path: String) -> Result<String, String> {
+    run(|| shell::read_text_file(&path, 512 * 1024))
+}
+
+#[tauri::command]
+pub fn get_app_paths(state: State<Arc<AppState>>) -> Result<serde_json::Value, String> {
+    run(|| {
+        let settings = state.db.settings().get_all()?;
+        Ok(serde_json::json!({
+            "databasePath": state.db.path().to_string_lossy(),
+            "downloadDirectory": settings.download_directory,
+        }))
+    })
+}
+
+#[tauri::command]
+pub fn get_settings(state: State<Arc<AppState>>) -> Result<AppSettings, String> {
     run(|| state.db.settings().get_all())
 }
 
 #[tauri::command]
 pub fn update_settings(
-    state: State<AppState>,
+    state: State<Arc<AppState>>,
     settings: AppSettings,
 ) -> Result<AppSettings, String> {
     run(|| state.db.settings().update(&settings))
@@ -221,7 +356,7 @@ pub fn update_settings(
 
 #[tauri::command]
 pub fn validate_platform_auth(
-    state: State<AppState>,
+    state: State<Arc<AppState>>,
     platform: String,
 ) -> Result<AuthStatus, String> {
     run(|| {
@@ -239,12 +374,12 @@ pub fn validate_platform_auth(
 }
 
 #[tauri::command]
-pub fn start_sidecar(state: State<AppState>) -> Result<SidecarHealth, String> {
+pub fn start_sidecar(state: State<Arc<AppState>>) -> Result<SidecarHealth, String> {
     run(|| state.sidecar.start())
 }
 
 #[tauri::command]
-pub fn sidecar_health(state: State<AppState>) -> Result<SidecarHealth, String> {
+pub fn sidecar_health(state: State<Arc<AppState>>) -> Result<SidecarHealth, String> {
     run(|| state.sidecar.health())
 }
 

@@ -1,10 +1,11 @@
 mod app_state;
+pub mod db;
 mod commands;
-mod db;
 mod errors;
 mod logging;
 mod mock;
-mod models;
+pub mod models;
+mod shell;
 mod sidecar;
 mod tasks;
 
@@ -26,7 +27,7 @@ pub fn run() {
             database.tasks().recover_interrupted()?;
             let settings = database.settings().get_all()?;
             std::fs::create_dir_all(&settings.download_directory).ok();
-            let state = AppState::new(database);
+            let state = Arc::new(AppState::new(database));
             let sidecar = Arc::clone(&state.sidecar);
             app.manage(state);
             tracing::info!("Cliprove started, db at {:?}", app_data_dir);
@@ -44,6 +45,22 @@ pub fn run() {
             commands::list_tasks,
             commands::task_action,
             commands::list_library,
+            commands::get_library_item,
+            commands::delete_library_item,
+            commands::list_tags,
+            commands::create_tag,
+            commands::delete_tag,
+            commands::set_library_tags,
+            commands::list_collections,
+            commands::create_collection,
+            commands::rename_collection,
+            commands::delete_collection,
+            commands::add_to_collection,
+            commands::remove_from_collection,
+            commands::reveal_in_finder,
+            commands::open_local_file,
+            commands::read_local_file,
+            commands::get_app_paths,
             commands::get_settings,
             commands::update_settings,
             commands::validate_platform_auth,

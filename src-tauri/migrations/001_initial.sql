@@ -1,4 +1,3 @@
-pub const INITIAL_SQL: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_migrations (
     version INTEGER PRIMARY KEY,
     applied_at INTEGER NOT NULL
@@ -57,4 +56,3 @@ CREATE TABLE IF NOT EXISTS download_tasks (
 CREATE INDEX IF NOT EXISTS idx_library_items_title ON library_items(title);
 CREATE INDEX IF NOT EXISTS idx_library_items_author ON library_items(author_name);
 CREATE INDEX IF NOT EXISTS idx_download_tasks_status ON download_tasks(status);
-"#;

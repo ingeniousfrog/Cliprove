@@ -1,10 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  AppPaths,
   AppSettings,
   AuthStatus,
+  Collection,
   DownloadOptions,
   DownloadSpec,
   DownloadTask,
+  LibraryFilter,
   LibraryItem,
   MediaItem,
   ParsedMedia,
@@ -12,6 +15,7 @@ import type {
   SearchPage,
   SearchQuery,
   SidecarHealth,
+  Tag,
 } from "@/types";
 
 export async function parseLink(url: string): Promise<ParsedMedia> {
@@ -44,8 +48,89 @@ export async function taskAction(
   return invoke("task_action", { taskId, action });
 }
 
-export async function listLibrary(query?: string): Promise<LibraryItem[]> {
-  return invoke<LibraryItem[]>("list_library", { query: query ?? null });
+export async function listLibrary(
+  filter?: LibraryFilter
+): Promise<LibraryItem[]> {
+  return invoke<LibraryItem[]>("list_library", { filter: filter ?? null });
+}
+
+export async function getLibraryItem(id: string): Promise<LibraryItem> {
+  return invoke<LibraryItem>("get_library_item", { id });
+}
+
+export async function deleteLibraryItem(
+  id: string,
+  deleteFiles: boolean
+): Promise<void> {
+  return invoke("delete_library_item", { id, deleteFiles });
+}
+
+export async function listTags(): Promise<Tag[]> {
+  return invoke<Tag[]>("list_tags");
+}
+
+export async function createTag(name: string): Promise<Tag> {
+  return invoke<Tag>("create_tag", { name });
+}
+
+export async function deleteTag(id: string): Promise<void> {
+  return invoke("delete_tag", { id });
+}
+
+export async function setLibraryTags(
+  libraryItemId: string,
+  tagIds: string[]
+): Promise<string[]> {
+  return invoke<string[]>("set_library_tags", { libraryItemId, tagIds });
+}
+
+export async function listCollections(): Promise<Collection[]> {
+  return invoke<Collection[]>("list_collections");
+}
+
+export async function createCollection(name: string): Promise<Collection> {
+  return invoke<Collection>("create_collection", { name });
+}
+
+export async function renameCollection(
+  id: string,
+  name: string
+): Promise<Collection> {
+  return invoke<Collection>("rename_collection", { id, name });
+}
+
+export async function deleteCollection(id: string): Promise<void> {
+  return invoke("delete_collection", { id });
+}
+
+export async function addToCollection(
+  collectionId: string,
+  libraryItemId: string
+): Promise<void> {
+  return invoke("add_to_collection", { collectionId, libraryItemId });
+}
+
+export async function removeFromCollection(
+  collectionId: string,
+  libraryItemId: string
+): Promise<void> {
+  return invoke("remove_from_collection", { collectionId, libraryItemId });
+}
+
+export async function revealInFinder(path: string): Promise<void> {
+  return invoke("reveal_in_finder", { path });
+}
+
+export async function openLocalFile(path: string): Promise<void> {
+  return invoke("open_local_file", { path });
+}
+
+export async function readLocalFile(path: string): Promise<string> {
+  return invoke<string>("read_local_file", { path });
+}
+
+export async function getAppPaths(): Promise<AppPaths> {
+  return invoke<AppPaths>("get_app_paths");
 }
 
 export async function getSettings(): Promise<AppSettings> {

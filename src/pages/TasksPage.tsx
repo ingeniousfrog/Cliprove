@@ -1,4 +1,6 @@
+import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { listen } from "@tauri-apps/api/event";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +11,7 @@ import {
   platformLabel,
   statusLabel,
 } from "@/lib/utils";
+import type { DownloadProgress } from "@/types";
 
 export function TasksPage() {
   const queryClient = useQueryClient();
@@ -16,8 +19,17 @@ export function TasksPage() {
   const { data: tasks = [], isLoading } = useQuery({
     queryKey: ["tasks"],
     queryFn: listTasks,
-    refetchInterval: 2000,
+    refetchInterval: 5000,
   });
+
+  useEffect(() => {
+    const unlisten = listen<DownloadProgress>("download-progress", () => {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    });
+    return () => {
+      unlisten.then((dispose) => dispose());
+    };
+  }, [queryClient]);
 
   const actionMutation = useMutation({
     mutationFn: ({
@@ -30,14 +42,48 @@ export function TasksPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tasks"] }),
   });
 
+  const interruptedTasks = tasks.filter((task) => task.status === "interrupted");
+
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-4 p-6">
       <div>
         <h1 className="text-xl font-semibold">任务中心</h1>
         <p className="mt-1 text-sm text-slate-500">
-          查看排队、进行中、已完成与失败任务。
+          查看排队、进行中、已完成与失败任务；支持恢复上次中断的下载。
         </p>
       </div>
+
+      {interruptedTasks.length > 0 ? (
+        <Card>
+          <CardHeader
+            title="中断任务"
+            description={`检测到 ${interruptedTasks.length} 个上次未完成的任务`}
+          />
+          <CardBody className="flex flex-col gap-2">
+            {interruptedTasks.map((task) => (
+              <div
+                key={task.id}
+                className="flex items-center justify-between rounded-lg border border-amber-100 bg-amber-50 px-3 py-2"
+              >
+                <div>
+                  <p className="text-sm font-medium">{task.title}</p>
+                  <p className="text-xs text-amber-700">
+                    {platformLabel(task.platform)} · {task.stage}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() =>
+                    actionMutation.mutate({ taskId: task.id, action: "resume" })
+                  }
+                >
+                  恢复下载
+                </Button>
+              </div>
+            ))}
+          </CardBody>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader title="全部任务" description={`共 ${tasks.length} 条`} />
@@ -74,7 +120,9 @@ export function TasksPage() {
                             ? "success"
                             : task.status === "failed"
                               ? "danger"
-                              : "default"
+                              : task.status === "interrupted"
+                                ? "warning"
+                                : "default"
                         }
                       >
                         {statusLabel(task.status)}
@@ -90,6 +138,20 @@ export function TasksPage() {
                     </td>
                     <td className="px-2 py-2">
                       <div className="flex gap-1">
+                        {task.status === "interrupted" ? (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() =>
+                              actionMutation.mutate({
+                                taskId: task.id,
+                                action: "resume",
+                              })
+                            }
+                          >
+                            恢复
+                          </Button>
+                        ) : null}
                         {task.status === "failed" ? (
                           <Button
                             size="sm"

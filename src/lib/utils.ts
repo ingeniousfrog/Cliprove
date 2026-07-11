@@ -45,6 +45,21 @@ export function platformLabel(platform: string): string {
   }
 }
 
+export function mediaTypeLabel(mediaType: string): string {
+  switch (mediaType) {
+    case "video":
+      return "视频";
+    case "image_post":
+      return "图文";
+    case "multipart":
+      return "分 P";
+    case "audio":
+      return "音频";
+    default:
+      return mediaType;
+  }
+}
+
 export function statusLabel(status: string): string {
   const map: Record<string, string> = {
     pending: "等待中",

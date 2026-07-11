@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { detectAdapter } from "@/adapters";
-import { enqueueDownload, listTasks, parseLink } from "@/lib/tauri";
+import { enqueueDownload, getSettings, listTasks, parseLink } from "@/lib/tauri";
 import { useAppStore } from "@/stores/app";
 import {
   formatDate,
@@ -57,6 +57,35 @@ export function HomePage() {
     queryFn: listTasks,
   });
 
+  const settingsQuery = useQuery({
+    queryKey: ["settings"],
+    queryFn: getSettings,
+  });
+
+  const pasteFromClipboard = async () => {
+    const text = await navigator.clipboard.readText();
+    if (text.trim()) setUrl(text.trim());
+  };
+
+  useEffect(() => {
+    if (!settingsQuery.data?.clipboardDetect) return;
+
+    const detectClipboard = async () => {
+      try {
+        const text = await navigator.clipboard.readText();
+        if (!text.trim() || url.trim()) return;
+        if (detectAdapter(text.trim())) setUrl(text.trim());
+      } catch {
+        // Clipboard permission may be denied; ignore silently.
+      }
+    };
+
+    detectClipboard();
+    const onFocus = () => detectClipboard();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [settingsQuery.data?.clipboardDetect, url]);
+
   const toggleAsset = (assetId: string) => {
     setSelectedAssets((current) =>
       current.includes(assetId)
@@ -92,12 +121,17 @@ export function HomePage() {
                 "等待输入有效链接"
               )}
             </div>
-            <Button
-              onClick={() => parseMutation.mutate()}
-              disabled={!url.trim() || parseMutation.isPending}
-            >
-              {parseMutation.isPending ? "解析中…" : "解析链接"}
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="secondary" size="sm" onClick={pasteFromClipboard}>
+                从剪贴板粘贴
+              </Button>
+              <Button
+                onClick={() => parseMutation.mutate()}
+                disabled={!url.trim() || parseMutation.isPending}
+              >
+                {parseMutation.isPending ? "解析中…" : "解析链接"}
+              </Button>
+            </div>
           </div>
           {parseMutation.isError ? (
             <p className="text-sm text-red-600">

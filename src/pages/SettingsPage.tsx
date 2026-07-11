@@ -5,6 +5,7 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
+  getAppPaths,
   getSettings,
   sidecarHealth,
   startSidecar,
@@ -27,6 +28,11 @@ export function SettingsPage() {
     queryKey: ["sidecar-health"],
     queryFn: sidecarHealth,
     retry: false,
+  });
+
+  const pathsQuery = useQuery({
+    queryKey: ["app-paths"],
+    queryFn: getAppPaths,
   });
 
   useEffect(() => {
@@ -238,6 +244,27 @@ export function SettingsPage() {
             checked={draft.saveSubtitles}
             onChange={(value) => updateField("saveSubtitles", value)}
           />
+          <ToggleRow
+            label="自动检测剪贴板链接（进入首页时）"
+            checked={draft.clipboardDetect}
+            onChange={(value) => updateField("clipboardDetect", value)}
+          />
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title="本地路径" description="数据库与下载目录位置" />
+        <CardBody className="space-y-2 text-xs text-slate-600">
+          <div>
+            <div className="text-slate-500">数据库</div>
+            <div className="break-all">{pathsQuery.data?.databasePath ?? "—"}</div>
+          </div>
+          <div>
+            <div className="text-slate-500">下载目录</div>
+            <div className="break-all">
+              {pathsQuery.data?.downloadDirectory ?? draft.downloadDirectory}
+            </div>
+          </div>
         </CardBody>
       </Card>
 

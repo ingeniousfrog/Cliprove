@@ -2,7 +2,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use tauri::{AppHandle, Emitter};
+use tauri_plugin_opener::OpenerExt;
 
+use crate::app_state::AppState;
 use crate::db::Database;
 use crate::errors::{AppError, AppResult};
 use crate::models::{DownloadOptions, MediaItem, StructuredError};
@@ -10,18 +12,32 @@ use crate::sidecar::SidecarManager;
 
 pub async fn run_task(
     app: AppHandle,
-    db: Arc<Database>,
-    sidecar: Arc<SidecarManager>,
+    state: Arc<AppState>,
     task_id: String,
     item: MediaItem,
     output_dir: String,
     options: DownloadOptions,
 ) -> AppResult<()> {
+    let _permit = state
+        .download_slots
+        .acquire()
+        .await
+        .map_err(|_| AppError::Message("下载并发槽不可用".to_string()))?;
+
     if item.platform == "douyin" || item.platform == "bilibili" {
-        return run_sidecar_task(app, db, sidecar, task_id, item, output_dir, options).await;
+        return run_sidecar_task(
+            app,
+            Arc::clone(&state.db),
+            Arc::clone(&state.sidecar),
+            task_id,
+            item,
+            output_dir,
+            options,
+        )
+        .await;
     }
 
-    run_mock_task(app, db, task_id, item, output_dir).await
+    run_mock_task(app, Arc::clone(&state.db), task_id, item, output_dir).await
 }
 
 async fn run_sidecar_task(
@@ -132,8 +148,7 @@ async fn run_mock_task(
 
 pub fn spawn_task(
     app: AppHandle,
-    db: Arc<Database>,
-    sidecar: Arc<SidecarManager>,
+    state: Arc<AppState>,
     task_id: String,
     item: MediaItem,
     output_dir: String,
@@ -142,8 +157,7 @@ pub fn spawn_task(
     tauri::async_runtime::spawn(async move {
         if let Err(error) = run_task(
             app,
-            db,
-            sidecar,
+            state,
             task_id.clone(),
             item,
             output_dir,
@@ -167,4 +181,10 @@ fn emit_progress(app: &AppHandle, task_id: &str, stage: &str, progress: f64) {
             "retryCount": 0
         }),
     );
+}
+
+pub fn open_path(app: &AppHandle, path: &str) -> AppResult<()> {
+    app.opener()
+        .open_path(path, None::<&str>)
+        .map_err(|error| AppError::Message(error.to_string()))
 }

@@ -165,8 +165,38 @@ export interface LibraryItem {
   fileSize?: number;
   checksum?: string;
   searchKeyword?: string;
+  tags: string[];
   createdAt: number;
   updatedAt: number;
+}
+
+export interface LibraryFilter {
+  query?: string;
+  platform?: Platform;
+  mediaType?: MediaType;
+  dateFrom?: number;
+  dateTo?: number;
+  collectionId?: string;
+  tagId?: string;
+}
+
+export interface Tag {
+  id: string;
+  name: string;
+  createdAt: number;
+}
+
+export interface Collection {
+  id: string;
+  name: string;
+  itemCount: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface AppPaths {
+  databasePath: string;
+  downloadDirectory: string;
 }
 
 export interface AuthStatus {
@@ -193,6 +223,7 @@ export interface AppSettings {
   saveCover: boolean;
   saveAudio: boolean;
   saveSubtitles: boolean;
+  clipboardDetect: boolean;
 }
 
 export interface SidecarHealth {

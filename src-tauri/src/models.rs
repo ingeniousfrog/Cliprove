@@ -148,6 +148,37 @@ pub struct LibraryItem {
     pub file_size: Option<i64>,
     pub checksum: Option<String>,
     pub search_keyword: Option<String>,
+    pub tags: Vec<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryFilter {
+    pub query: Option<String>,
+    pub platform: Option<String>,
+    pub media_type: Option<String>,
+    pub date_from: Option<i64>,
+    pub date_to: Option<i64>,
+    pub collection_id: Option<String>,
+    pub tag_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Tag {
+    pub id: String,
+    pub name: String,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Collection {
+    pub id: String,
+    pub name: String,
+    pub item_count: i64,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -174,6 +205,7 @@ pub struct AppSettings {
     pub save_cover: bool,
     pub save_audio: bool,
     pub save_subtitles: bool,
+    pub clipboard_detect: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -201,6 +233,7 @@ impl Default for AppSettings {
             save_cover: true,
             save_audio: false,
             save_subtitles: true,
+            clipboard_detect: false,
         }
     }
 }

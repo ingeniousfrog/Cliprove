@@ -9,7 +9,20 @@ Local-first desktop app for searching, collecting, and managing publicly accessi
 - **Data**: SQLite (application database)
 - **Engine**: Python sidecar (FastAPI) — Douyin + Bilibili
 
-## Phase 3 status
+## Phase 4 status
+
+Library management and reliability:
+
+- SQLite FTS5 full-text search (title, author, tags, IDs)
+- Filters: platform, media type, download date, tags, collections
+- Tags and collections CRUD
+- Open file / Reveal in Finder / copy source link / view metadata
+- Safe delete with optional local file removal
+- Interrupted task recovery on Tasks page
+- Clipboard link detection (optional, Settings toggle)
+- Download concurrency limiting
+
+## Phase 3 status (completed)
 
 Bilibili link parse/search/download via sidecar:
 

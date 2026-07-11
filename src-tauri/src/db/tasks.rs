@@ -5,6 +5,13 @@ use rusqlite::{params, Connection, OptionalExtension};
 use crate::errors::{AppError, AppResult};
 use crate::models::{DownloadOptions, DownloadTask, MediaItem, StructuredError};
 
+#[derive(Debug, Clone)]
+pub struct TaskPayload {
+    pub item_json: Option<String>,
+    pub options_json: Option<String>,
+    pub output_dir: Option<String>,
+}
+
 pub struct TaskRepository<'a> {
     conn: &'a Mutex<Connection>,
 }
@@ -53,6 +60,8 @@ impl<'a> TaskRepository<'a> {
         output_dir: &str,
     ) -> AppResult<DownloadTask> {
         let now = chrono::Utc::now().timestamp_millis();
+        let item_json = serde_json::to_string(item)?;
+        let options_json = serde_json::to_string(options)?;
         let task = DownloadTask {
             id: uuid::Uuid::new_v4().to_string(),
             platform: item.platform.clone(),
@@ -77,8 +86,8 @@ impl<'a> TaskRepository<'a> {
         conn.execute(
             "INSERT INTO download_tasks (
                 id, platform, platform_item_id, title, status, stage, progress,
-                speed_bps, retry_count, options_json, output_dir, created_at, updated_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                speed_bps, retry_count, options_json, item_json, output_dir, created_at, updated_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
             params![
                 task.id,
                 task.platform,
@@ -89,7 +98,8 @@ impl<'a> TaskRepository<'a> {
                 task.progress,
                 task.speed_bps,
                 task.retry_count,
-                serde_json::to_string(options)?,
+                options_json,
+                item_json,
                 task.output_dir,
                 task.created_at,
                 task.updated_at,
@@ -172,6 +182,39 @@ impl<'a> TaskRepository<'a> {
             "UPDATE download_tasks
              SET status = 'queued', stage = '等待重试', progress = 0, error_json = NULL,
                  retry_count = retry_count + 1, updated_at = ?2
+             WHERE id = ?1",
+            params![id, now],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_payload(&self, id: &str) -> AppResult<Option<TaskPayload>> {
+        let conn = self.conn.lock().map_err(|_| {
+            AppError::Message("database lock poisoned".to_string())
+        })?;
+        conn.query_row(
+            "SELECT item_json, options_json, output_dir FROM download_tasks WHERE id = ?1",
+            [id],
+            |row| {
+                Ok(TaskPayload {
+                    item_json: row.get(0)?,
+                    options_json: row.get(1)?,
+                    output_dir: row.get(2)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(AppError::from)
+    }
+
+    pub fn mark_resume(&self, id: &str) -> AppResult<()> {
+        let now = chrono::Utc::now().timestamp_millis();
+        let conn = self.conn.lock().map_err(|_| {
+            AppError::Message("database lock poisoned".to_string())
+        })?;
+        conn.execute(
+            "UPDATE download_tasks
+             SET status = 'queued', stage = '等待恢复', progress = 0, error_json = NULL, updated_at = ?2
              WHERE id = ?1",
             params![id, now],
         )?;
