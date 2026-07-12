@@ -16,6 +16,9 @@ from platforms.errors import map_exception
 from .downloader import download_video
 from .mapper import bilibili_preview_url, info_to_parsed_media, search_result_to_media_item
 
+BILIBILI_PARSE_TIMEOUT_SECONDS = 25
+BILIBILI_PREVIEW_TIMEOUT_SECONDS = 3
+
 
 def _is_bilibili_url(url: str) -> bool:
     lowered = url.lower()
@@ -33,6 +36,9 @@ def _ydl_base_opts(cookies: str = "", proxy: str = "") -> dict[str, Any]:
         "no_warnings": True,
         "noplaylist": False,
         "extract_flat": False,
+        "socket_timeout": 15,
+        "retries": 1,
+        "extractor_retries": 1,
     }
     cookie_file = write_netscape_cookie_file(cookies)
     if cookie_file:
@@ -60,7 +66,9 @@ def _parse_filter_order(filters: dict[str, Any] | None) -> OrderVideo:
 async def _resolve_preview_url(bvid: str) -> str | None:
     if not bvid:
         return None
-    try:
+    fallback = bilibili_preview_url(bvid)
+
+    async def fetch_preview_url() -> str | None:
         item = video.Video(bvid=bvid)
         info = await item.get_info()
         pages = info.get("pages") if isinstance(info, dict) else None
@@ -68,8 +76,14 @@ async def _resolve_preview_url(bvid: str) -> str | None:
         cid = first_page.get("cid") if isinstance(first_page, dict) else None
         aid = info.get("aid") if isinstance(info, dict) else None
         return bilibili_preview_url(bvid, aid=aid, cid=cid)
+
+    try:
+        return await asyncio.wait_for(
+            fetch_preview_url(),
+            timeout=BILIBILI_PREVIEW_TIMEOUT_SECONDS,
+        )
     except Exception:  # noqa: BLE001
-        return bilibili_preview_url(bvid)
+        return fallback
 
 
 class BilibiliService:
@@ -90,11 +104,17 @@ class BilibiliService:
             except Exception as exc:  # noqa: BLE001
                 raise map_exception(exc) from exc
 
-        info = await asyncio.to_thread(extract)
+        try:
+            info = await asyncio.wait_for(
+                asyncio.to_thread(extract),
+                timeout=BILIBILI_PARSE_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError as exc:
+            raise ValueError(
+                "Bilibili 链接解析超时，请稍后重试；如果该视频需要登录，请先刷新 B 站登录状态"
+            ) from exc
+
         parsed = info_to_parsed_media(info, url.strip())
-        bvid = parsed["item"].get("platformItemId")
-        if isinstance(bvid, str):
-            parsed["item"]["previewUrl"] = await _resolve_preview_url(bvid)
         return parsed
 
     async def search(

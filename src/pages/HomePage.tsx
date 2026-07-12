@@ -26,6 +26,15 @@ import {
 } from "@/lib/utils";
 import type { DownloadOptions, DownloadProgress, MediaItem, Platform } from "@/types";
 
+function sameParsedUrl(input: string, candidate?: string): boolean {
+  if (!candidate) return false;
+  const normalizedInput = input.trim();
+  const normalizedCandidate = candidate.trim();
+  if (!normalizedInput || !normalizedCandidate) return false;
+  if (normalizedInput === normalizedCandidate) return true;
+  return normalizedInput.split(/[?#]/)[0] === normalizedCandidate.split(/[?#]/)[0];
+}
+
 export function HomePage() {
   const [url, setUrl] = useState("");
   const [selectedAssets, setSelectedAssets] = useState<string[]>([]);
@@ -42,12 +51,22 @@ export function HomePage() {
 
   const detected = url.trim() ? detectAdapter(url.trim()) : undefined;
 
+  const clearParsedMedia = () => {
+    setParsedMedia(null);
+    setSelectedAssets([]);
+    setSelectedQuality("best");
+    setPreviewItem(null);
+  };
+
   const parseMutation = useMutation({
     mutationFn: () => {
       if (!detected) {
         throw new Error("当前版本支持 Bilibili 或抖音分享链接");
       }
       return parseLink(url.trim());
+    },
+    onMutate: () => {
+      clearParsedMedia();
     },
     onSuccess: (data) => {
       setParsedMedia(data);
@@ -139,6 +158,21 @@ export function HomePage() {
       setPasting(false);
     }
   };
+
+  useEffect(() => {
+    if (!parsedMedia) return;
+    const currentUrl = url.trim();
+    if (!currentUrl) {
+      clearParsedMedia();
+      return;
+    }
+    if (
+      !sameParsedUrl(currentUrl, parsedMedia.item.originalUrl) &&
+      !sameParsedUrl(currentUrl, parsedMedia.item.canonicalUrl)
+    ) {
+      clearParsedMedia();
+    }
+  }, [url, parsedMedia]);
 
   useEffect(() => {
     const unlisten = listen<DownloadProgress>("download-progress", () => {
