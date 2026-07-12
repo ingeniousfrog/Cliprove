@@ -40,9 +40,13 @@ pub fn run() {
             app.manage(state);
             tracing::info!("Cliprove started, db at {:?}", app_data_dir);
 
-            if let Err(error) = sidecar.start() {
-                tracing::warn!("Sidecar auto-start failed: {error}");
-            }
+            // Sidecar cold start (PyInstaller onefile unpack) can take 30–60s.
+            // Spawn in background so the window appears immediately.
+            std::thread::spawn(move || {
+                if let Err(error) = sidecar.start() {
+                    tracing::warn!("Sidecar auto-start failed: {error}");
+                }
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

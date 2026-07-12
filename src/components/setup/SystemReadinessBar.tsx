@@ -16,6 +16,8 @@ export function SystemReadinessBar({
     queryFn: sidecarHealth,
     retry: false,
     staleTime: 30_000,
+    refetchInterval: (query) =>
+      query.state.data?.status === "ok" ? false : 2_000,
   });
 
   const ffmpegQuery = useQuery({

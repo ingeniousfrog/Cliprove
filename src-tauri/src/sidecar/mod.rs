@@ -12,7 +12,8 @@ use crate::models::SidecarHealth;
 const DEFAULT_PORT: u16 = 18765;
 const EXPECTED_SIDECAR_VERSION: &str = "0.5.2-youtube";
 const SIDECAR_BINARY_NAME: &str = "cliprove-sidecar";
-const STARTUP_ATTEMPTS: usize = 120;
+// PyInstaller onefile sidecar can take 30–60s to unpack on cold start.
+const STARTUP_ATTEMPTS: usize = 240;
 const STARTUP_POLL_MS: u64 = 250;
 
 pub struct SidecarManager {

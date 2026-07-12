@@ -33,6 +33,8 @@ export function SettingsPage() {
     queryKey: ["sidecar-health"],
     queryFn: sidecarHealth,
     retry: false,
+    refetchInterval: (query) =>
+      query.state.data?.status === "ok" ? false : 2_000,
   });
 
   const pathsQuery = useQuery({
