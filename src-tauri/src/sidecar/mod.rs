@@ -12,6 +12,8 @@ use crate::models::SidecarHealth;
 const DEFAULT_PORT: u16 = 18765;
 const EXPECTED_SIDECAR_VERSION: &str = "0.5.2-youtube";
 const SIDECAR_BINARY_NAME: &str = "cliprove-sidecar";
+const STARTUP_ATTEMPTS: usize = 120;
+const STARTUP_POLL_MS: u64 = 250;
 
 pub struct SidecarManager {
     port: u16,
@@ -44,6 +46,7 @@ impl SidecarManager {
         self.stop()?;
 
         let (program, args, working_dir) = resolve_sidecar_launcher(self.port)?;
+        let launcher_label = format_launcher(&program, &args);
         let mut command = Command::new(&program);
         command.args(&args);
         command.env("PATH", augmented_path());
@@ -77,11 +80,28 @@ impl SidecarManager {
             *guard = Some(child);
         }
 
-        for _ in 0..30 {
-            std::thread::sleep(std::time::Duration::from_millis(200));
+        for _ in 0..STARTUP_ATTEMPTS {
+            std::thread::sleep(std::time::Duration::from_millis(STARTUP_POLL_MS));
             if let Ok(health) = self.health() {
                 if is_current_sidecar(&health) {
                     return Ok(health);
+                }
+            }
+
+            let mut guard = self
+                .child
+                .lock()
+                .map_err(|_| AppError::Message("sidecar lock poisoned".to_string()))?;
+            if let Some(child) = guard.as_mut() {
+                if let Ok(Some(status)) = child.try_wait() {
+                    guard.take();
+                    return Err(AppError::structured(
+                        "engine_failure",
+                        "Sidecar 启动失败",
+                        Some(format!(
+                            "启动器已退出（{status}）：{launcher_label}。请检查 sidecar/.venv 依赖或重新运行 scripts/dev.sh"
+                        )),
+                    ));
                 }
             }
         }
@@ -89,10 +109,10 @@ impl SidecarManager {
         Err(AppError::structured(
             "engine_failure",
             "Sidecar 启动超时",
-            Some(
-                "检查 sidecar 依赖、engines/douyin-downloader submodule，或重新打包 sidecar"
-                    .to_string(),
-            ),
+            Some(format!(
+                "已等待约 {} 秒：{launcher_label}。请检查 sidecar/.venv 依赖，或重新运行 scripts/dev.sh",
+                STARTUP_ATTEMPTS as u64 * STARTUP_POLL_MS / 1000
+            )),
         ))
     }
 
@@ -120,6 +140,12 @@ impl Drop for SidecarManager {
 
 fn is_current_sidecar(health: &SidecarHealth) -> bool {
     health.status == "ok" && health.version.as_deref() == Some(EXPECTED_SIDECAR_VERSION)
+}
+
+fn format_launcher(program: &std::path::Path, args: &[String]) -> String {
+    let mut parts = vec![program.to_string_lossy().to_string()];
+    parts.extend(args.iter().cloned());
+    parts.join(" ")
 }
 
 fn augmented_path() -> String {
@@ -254,5 +280,14 @@ mod tests {
             status: "failed".to_string(),
             version: Some(EXPECTED_SIDECAR_VERSION.to_string()),
         }));
+    }
+
+    #[test]
+    fn format_launcher_includes_program_and_args() {
+        let label = format_launcher(
+            std::path::Path::new("/tmp/python"),
+            &["app.py".to_string(), "--port".to_string(), "18765".to_string()],
+        );
+        assert_eq!(label, "/tmp/python app.py --port 18765");
     }
 }
