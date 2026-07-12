@@ -61,8 +61,8 @@ chmod +x scripts/build.sh
 ```bash
 # 1. 更新 src-tauri/tauri.conf.json 的 version
 # 2. 提交后打 tag 并推送（推 main 不会发版，只会跑 CI）
-git tag v0.1.1
-git push origin v0.1.1
+git tag v0.1.2
+git push origin v0.1.2
 ```
 
 Release 工作流会自动构建 **macOS `.dmg`** 与 **Windows `.exe` / `.msi`**，并发布到 [GitHub Releases](https://github.com/ingeniousfrog/Cliprove/releases)。
