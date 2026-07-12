@@ -44,6 +44,12 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Verify engine submodule
+        shell: bash
+        run: |
+          test -d engines/douyin-downloader || (echo "douyin-downloader submodule missing" && exit 1)
+          ls engines/douyin-downloader | head
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:

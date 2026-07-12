@@ -1,12 +1,17 @@
 # -*- mode: python ; coding: utf-8 -*-
 from pathlib import Path
 
-ROOT = Path(SPECPATH).resolve().parent
-ENGINE_SRC = ROOT.parent / "engines" / "douyin-downloader"
+SPEC_PATH = Path(SPECPATH).resolve()
+SIDECAR_DIR = SPEC_PATH.parent if SPEC_PATH.suffix == ".spec" else SPEC_PATH
+REPO_ROOT = SIDECAR_DIR.parent
+ENGINE_SRC = REPO_ROOT / "engines" / "douyin-downloader"
+
+if not ENGINE_SRC.is_dir():
+    raise SystemExit(f"douyin-downloader engine not found: {ENGINE_SRC}")
 
 a = Analysis(
     ["app.py"],
-    pathex=[str(ROOT)],
+    pathex=[str(SIDECAR_DIR)],
     binaries=[],
     datas=[
         (str(ENGINE_SRC), "engines/douyin-downloader"),

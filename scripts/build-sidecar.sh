@@ -6,6 +6,11 @@ cd "$ROOT"
 
 git submodule update --init --recursive
 
+if [[ ! -d "$ROOT/engines/douyin-downloader/.git" && ! -f "$ROOT/engines/douyin-downloader/__init__.py" ]]; then
+  echo "douyin-downloader submodule is missing at $ROOT/engines/douyin-downloader"
+  exit 1
+fi
+
 VENV_DIR="$ROOT/sidecar/.venv"
 if [[ ! -d "$VENV_DIR" ]]; then
   if command -v python3 >/dev/null 2>&1; then
