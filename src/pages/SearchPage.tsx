@@ -57,6 +57,7 @@ export function SearchPage() {
   const [previewItem, setPreviewItem] = useState<MediaItem | null>(null);
   const [ffmpegDialogOpen, setFfmpegDialogOpen] = useState(false);
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
+  const [authPlatform, setAuthPlatform] = useState<Platform>("bilibili");
   const [authBannerVisible, setAuthBannerVisible] = useState(false);
   const pendingBatchRef = useRef<MediaItem[]>([]);
   const queryClient = useQueryClient();
@@ -96,7 +97,12 @@ export function SearchPage() {
       setCursor(undefined);
       setHasMore(false);
       setSearchError(formatInvokeError(error));
-      setAuthBannerVisible(isAuthErrorCode(parseErrorCode(error)));
+      if (isAuthErrorCode(parseErrorCode(error))) {
+        setAuthPlatform(platform);
+        setAuthBannerVisible(true);
+      } else {
+        setAuthBannerVisible(false);
+      }
     } finally {
       setIsSearching(false);
     }
@@ -122,17 +128,25 @@ export function SearchPage() {
     setHasMore(page.hasMore);
   };
 
-  const buildDownloadOptions = (item: MediaItem) => ({
-    assets:
-      item.mediaType === "image_post"
-        ? ["images", "cover", "metadata"]
-        : item.platform === "bilibili"
-          ? ["video", "cover", "metadata", "subtitle"]
-          : ["video", "cover", "metadata"],
-    saveCover: true,
-    saveMetadata: true,
-    saveSubtitles: item.platform === "bilibili",
-  });
+  const buildDownloadOptions = (items: MediaItem[]) => {
+    const assets = new Set<string>();
+    for (const item of items) {
+      const itemAssets =
+        item.mediaType === "image_post"
+          ? ["images", "cover", "metadata"]
+          : item.platform === "bilibili"
+            ? ["video", "cover", "metadata", "subtitle"]
+            : ["video", "cover", "metadata"];
+      itemAssets.forEach((asset) => assets.add(asset));
+    }
+
+    return {
+      assets: Array.from(assets),
+      saveCover: assets.has("cover"),
+      saveMetadata: assets.has("metadata"),
+      saveSubtitles: assets.has("subtitle"),
+    };
+  };
 
   const runBatchDownload = async (items: MediaItem[]) => {
     if (items.length === 0) {
@@ -146,7 +160,7 @@ export function SearchPage() {
         return;
       }
     }
-    const result = await enqueueDownloadBatch(items, buildDownloadOptions(items[0]));
+    const result = await enqueueDownloadBatch(items, buildDownloadOptions(items));
     if (result.enqueuedCount === 0) {
       const firstSkip = result.results.find((entry) => entry.message)?.message;
       throw new Error(firstSkip ?? "没有可加入队列的下载任务");
@@ -206,14 +220,24 @@ export function SearchPage() {
       <div>
         <h1 className="text-xl font-semibold">关键词搜索</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Bilibili 已接入真实搜索；支持筛选、分页加载、多选批量下载。
+          Bilibili 与抖音已接入真实搜索；抖音搜索需要登录 Cookie，且可能受平台验证影响。
         </p>
       </div>
 
       {authBannerVisible ? (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          <span>登录 B 站后可搜索更多内容或下载高清资源。</span>
-          <Button size="sm" onClick={() => setAuthDialogOpen(true)}>
+          <span>
+            {authPlatform === "douyin"
+              ? "抖音搜索需要有效登录；如果遇到滑块、答题等验证，请在浏览器登录窗口内完成后重试。"
+              : "登录 Bilibili 后可搜索更多内容或下载高清资源。"}
+          </span>
+          <Button
+            size="sm"
+            onClick={() => {
+              setAuthPlatform(platform);
+              setAuthDialogOpen(true);
+            }}
+          >
             去登录
           </Button>
         </div>
@@ -236,6 +260,7 @@ export function SearchPage() {
                   setHasMore(false);
                   setHasSearched(false);
                   setSearchError(null);
+                  setAuthBannerVisible(false);
                   setSort(next === "bilibili" ? "total" : "general");
                 }}
               >
@@ -470,7 +495,7 @@ export function SearchPage() {
       />
       <PlatformAuthDialog
         open={authDialogOpen}
-        platform="bilibili"
+        platform={authPlatform}
         onClose={() => setAuthDialogOpen(false)}
         onLoggedIn={() => {
           setAuthBannerVisible(false);

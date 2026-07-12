@@ -61,6 +61,34 @@ impl<'a> LibraryRepository<'a> {
         }
     }
 
+    pub fn get_by_platform_item(
+        &self,
+        platform: &str,
+        platform_item_id: &str,
+    ) -> AppResult<Option<LibraryItem>> {
+        let item = {
+            let conn = self.conn.lock().map_err(|_| {
+                AppError::Message("database lock poisoned".to_string())
+            })?;
+            conn.query_row(
+                "SELECT id, platform, platform_item_id, original_url, canonical_url, title,
+                        description, author_id, author_name, published_at, media_type, duration_sec,
+                        cover_path, media_paths, metadata_path, subtitle_paths, file_size, checksum,
+                        search_keyword, created_at, updated_at
+                 FROM library_items WHERE platform = ?1 AND platform_item_id = ?2",
+                params![platform, platform_item_id],
+                map_library_row,
+            )
+            .optional()
+            .map_err(AppError::from)?
+        };
+
+        match item {
+            Some(value) => Ok(Some(self.attach_tags(value)?)),
+            None => Ok(None),
+        }
+    }
+
     pub fn list(&self, filter: &LibraryFilter) -> AppResult<Vec<LibraryItem>> {
         let items = {
             let conn = self.conn.lock().map_err(|_| {
@@ -168,6 +196,12 @@ impl<'a> LibraryRepository<'a> {
     }
 
     pub fn insert_from_media(&self, item: &MediaItem, output_dir: &str) -> AppResult<LibraryItem> {
+        if let Some(existing) =
+            self.get_by_platform_item(&item.platform, &item.platform_item_id)?
+        {
+            return Ok(existing);
+        }
+
         let now = chrono::Utc::now().timestamp_millis();
         let library_item = LibraryItem {
             id: uuid::Uuid::new_v4().to_string(),
@@ -206,6 +240,12 @@ impl<'a> LibraryRepository<'a> {
         subtitle_paths: Vec<String>,
         file_size: Option<i64>,
     ) -> AppResult<LibraryItem> {
+        if let Some(existing) =
+            self.get_by_platform_item(&item.platform, &item.platform_item_id)?
+        {
+            return Ok(existing);
+        }
+
         let now = chrono::Utc::now().timestamp_millis();
         let library_item = LibraryItem {
             id: uuid::Uuid::new_v4().to_string(),

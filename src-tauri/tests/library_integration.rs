@@ -55,3 +55,56 @@ fn library_fts_search_and_delete() {
     let after = db.library().list(&LibraryFilter::default()).expect("list");
     assert!(after.is_empty());
 }
+
+#[test]
+fn library_insert_with_paths_is_idempotent_for_existing_platform_item() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let db = Database::open(temp.path()).expect("open db");
+
+    let item = MediaItem {
+        platform: "bilibili".to_string(),
+        platform_item_id: "BV123".to_string(),
+        original_url: "https://www.bilibili.com/video/BV123".to_string(),
+        canonical_url: "https://www.bilibili.com/video/BV123".to_string(),
+        title: "重复下载测试".to_string(),
+        description: None,
+        author: Author {
+            id: "author2".to_string(),
+            name: "测试作者二".to_string(),
+            avatar_url: None,
+        },
+        published_at: None,
+        media_type: "video".to_string(),
+        duration_sec: Some(90),
+        cover_url: None,
+        preview_url: None,
+        search_keyword: None,
+    };
+
+    let first = db
+        .library()
+        .insert_with_paths(
+            &item,
+            Some("/tmp/cliprove/BV123/cover.jpg".to_string()),
+            vec!["/tmp/cliprove/BV123/video.mp4".to_string()],
+            Some("/tmp/cliprove/BV123/metadata.json".to_string()),
+            vec![],
+            Some(42),
+        )
+        .expect("first insert");
+
+    let second = db
+        .library()
+        .insert_with_paths(
+            &item,
+            Some("/tmp/cliprove/BV123-copy/cover.jpg".to_string()),
+            vec!["/tmp/cliprove/BV123-copy/video.mp4".to_string()],
+            Some("/tmp/cliprove/BV123-copy/metadata.json".to_string()),
+            vec![],
+            Some(84),
+        )
+        .expect("duplicate insert should return existing item");
+
+    assert_eq!(second.id, first.id);
+    assert_eq!(db.library().count().expect("count"), 1);
+}

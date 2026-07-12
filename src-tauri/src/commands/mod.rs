@@ -152,7 +152,7 @@ pub fn enqueue_download(
             state.inner(),
             item,
             &options,
-            false,
+            true,
             true,
             true,
         )? {

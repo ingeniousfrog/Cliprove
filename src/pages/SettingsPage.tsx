@@ -268,6 +268,21 @@ export function SettingsPage() {
         />
         <CardBody className="space-y-4">
           <PlatformAuthCard
+            platform="douyin"
+            title="抖音"
+            description="浏览器登录后可下载和搜索抖音内容；如遇平台验证，请在打开的浏览器内完成。"
+            loginLabel="浏览器登录"
+            cookieField="douyinCookies"
+            draft={draft}
+            onDraftChange={setDraft}
+            onSaved={(settings) => {
+              setDraft(settings);
+              queryClient.setQueryData(["settings"], settings);
+              setSaved(true);
+              setTimeout(() => setSaved(false), 2000);
+            }}
+          />
+          <PlatformAuthCard
             platform="bilibili"
             title="Bilibili"
             description="公开视频通常无需登录；扫码后可下载高画质或会员内容。"
@@ -286,28 +301,11 @@ export function SettingsPage() {
       </Card>
 
       <Card>
-        <CardHeader title="保存选项" />
+        <CardHeader
+          title="首页体验"
+          description="资源保存内容在每次下载前选择"
+        />
         <CardBody className="space-y-2 text-sm">
-          <ToggleRow
-            label="保存元数据"
-            checked={draft.saveMetadata}
-            onChange={(value) => updateField("saveMetadata", value)}
-          />
-          <ToggleRow
-            label="保存封面"
-            checked={draft.saveCover}
-            onChange={(value) => updateField("saveCover", value)}
-          />
-          <ToggleRow
-            label="保存音频"
-            checked={draft.saveAudio}
-            onChange={(value) => updateField("saveAudio", value)}
-          />
-          <ToggleRow
-            label="保存字幕"
-            checked={draft.saveSubtitles}
-            onChange={(value) => updateField("saveSubtitles", value)}
-          />
           <ToggleRow
             label="自动检测剪贴板链接（进入首页时）"
             checked={draft.clipboardDetect}

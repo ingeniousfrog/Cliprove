@@ -1,9 +1,11 @@
-import type { DownloadOptions, MediaItem, MediaType } from "@/types";
+import type { DownloadOptions, MediaItem, MediaType, Platform } from "@/types";
 
 export function requiresFfmpeg(
   assets: string[],
-  mediaType?: MediaType
+  mediaType?: MediaType,
+  platform?: Platform
 ): boolean {
+  if (platform === "douyin") return false;
   if (mediaType === "multipart") return true;
   if (assets.includes("video")) return true;
   return assets.some((asset) => asset.startsWith("part-"));
@@ -11,9 +13,10 @@ export function requiresFfmpeg(
 
 export function downloadOptionsRequireFfmpeg(
   options: DownloadOptions,
-  mediaType?: MediaType
+  mediaType?: MediaType,
+  platform?: Platform
 ): boolean {
-  return requiresFfmpeg(options.assets, mediaType);
+  return requiresFfmpeg(options.assets, mediaType, platform);
 }
 
 export function batchItemsRequireFfmpeg(items: MediaItem[]): boolean {
@@ -24,7 +27,8 @@ export function batchItemsRequireFfmpeg(items: MediaItem[]): boolean {
         : item.platform === "bilibili"
           ? ["video", "cover", "metadata", "subtitle"]
           : ["video", "cover", "metadata"],
-      item.mediaType
+      item.mediaType,
+      item.platform
     )
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { listen } from "@tauri-apps/api/event";
+import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,13 +17,14 @@ import { isAuthErrorCode, parseErrorCode } from "@/lib/errors";
 import { downloadOptionsRequireFfmpeg } from "@/lib/ffmpeg";
 import { enqueueDownload, ensureFfmpeg, getSettings, listTasks, parseLink } from "@/lib/tauri";
 import { useAppStore } from "@/stores/app";
+import { cn } from "@/lib/utils";
 import {
   formatDate,
   formatDuration,
   platformLabel,
   statusLabel,
 } from "@/lib/utils";
-import type { DownloadOptions, DownloadProgress, MediaItem } from "@/types";
+import type { DownloadOptions, DownloadProgress, MediaItem, Platform } from "@/types";
 
 export function HomePage() {
   const [url, setUrl] = useState("");
@@ -30,6 +32,7 @@ export function HomePage() {
   const [selectedQuality, setSelectedQuality] = useState<string>("best");
   const [ffmpegDialogOpen, setFfmpegDialogOpen] = useState(false);
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
+  const [authPlatform, setAuthPlatform] = useState<Platform>("bilibili");
   const queryClient = useQueryClient();
   const { parsedMedia, setParsedMedia } = useAppStore();
   const { pendingAction, runAction } = useTaskActions();
@@ -42,7 +45,7 @@ export function HomePage() {
   const parseMutation = useMutation({
     mutationFn: () => {
       if (!detected) {
-        throw new Error("当前版本暂只支持 Bilibili 链接");
+        throw new Error("当前版本支持 Bilibili 或抖音分享链接");
       }
       return parseLink(url.trim());
     },
@@ -53,6 +56,7 @@ export function HomePage() {
     },
     onError: (error) => {
       if (isAuthErrorCode(parseErrorCode(error))) {
+        setAuthPlatform(detected?.id ?? "bilibili");
         setAuthDialogOpen(true);
       }
     },
@@ -107,7 +111,13 @@ export function HomePage() {
   const startDownload = async () => {
     if (!parsedMedia || selectedAssets.length === 0) return;
     const options = buildDownloadOptions();
-    if (downloadOptionsRequireFfmpeg(options, parsedMedia.item.mediaType)) {
+    if (
+      downloadOptionsRequireFfmpeg(
+        options,
+        parsedMedia.item.mediaType,
+        parsedMedia.item.platform
+      )
+    ) {
       const status = await ensureFfmpeg();
       if (!status.valid) {
         retryDownloadRef.current = true;
@@ -181,7 +191,7 @@ export function HomePage() {
           <Textarea
             value={url}
             onChange={(event) => setUrl(event.target.value)}
-            placeholder="粘贴 Bilibili 分享链接…"
+            placeholder="粘贴 Bilibili 或抖音分享链接…"
           />
           <div className="flex items-center justify-between gap-3">
             <div className="text-xs text-slate-500">
@@ -190,7 +200,7 @@ export function HomePage() {
                   已识别平台：<Badge>{detected.name}</Badge>
                 </span>
               ) : (
-                "等待输入 Bilibili 链接"
+                "等待输入 Bilibili 或抖音链接"
               )}
             </div>
             <div className="flex gap-2">
@@ -217,7 +227,13 @@ export function HomePage() {
                 {(parseMutation.error as Error).message}
               </p>
               {isAuthErrorCode(parseErrorCode(parseMutation.error)) ? (
-                <Button size="sm" onClick={() => setAuthDialogOpen(true)}>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setAuthPlatform(detected?.id ?? "bilibili");
+                    setAuthDialogOpen(true);
+                  }}
+                >
                   去登录
                 </Button>
               ) : null}
@@ -261,20 +277,36 @@ export function HomePage() {
               </div>
               <div className="flex flex-wrap gap-2">
                 {parsedMedia.assets.map((asset) => {
-                  const active = selectedAssets.includes(asset.id);
+                  const checked = selectedAssets.includes(asset.id);
                   return (
-                    <button
+                    <label
                       key={asset.id}
-                      type="button"
-                      onClick={() => toggleAsset(asset.id)}
-                      className={`rounded-md border px-3 py-1.5 text-xs transition-all duration-100 active:scale-[0.98] ${
-                        active
+                      className={cn(
+                        "inline-flex cursor-pointer select-none items-center gap-2 rounded-md border px-3 py-2 text-sm transition-all duration-100 active:scale-[0.98]",
+                        checked
                           ? "border-slate-900 bg-slate-900 text-white"
-                          : "border-slate-200 bg-white text-slate-600"
-                      }`}
+                          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                      )}
                     >
-                      {asset.label}
-                    </button>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleAsset(asset.id)}
+                        className="sr-only"
+                      />
+                      <span
+                        className={cn(
+                          "flex h-4 w-4 items-center justify-center rounded-full border transition-colors",
+                          checked
+                            ? "border-white bg-white text-slate-900"
+                            : "border-slate-300 bg-white"
+                        )}
+                        aria-hidden="true"
+                      >
+                        {checked ? <Check className="h-3 w-3" strokeWidth={3} /> : null}
+                      </span>
+                      <span>{asset.label}</span>
+                    </label>
                   );
                 })}
               </div>
@@ -376,7 +408,7 @@ export function HomePage() {
       />
       <PlatformAuthDialog
         open={authDialogOpen}
-        platform="bilibili"
+        platform={authPlatform}
         onClose={() => setAuthDialogOpen(false)}
         onLoggedIn={() => {
           if (parseMutation.isError) {

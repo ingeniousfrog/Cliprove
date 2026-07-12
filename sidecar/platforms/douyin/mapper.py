@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlparse
 
 from platforms.cover_url import normalize_cover_url
 
@@ -13,9 +14,62 @@ ensure_engine_path()
 from core.downloader_base import BaseDownloader  # noqa: E402
 
 
-def _first_url(source: Any) -> str | None:
+def _ordered_urls(source: Any) -> list[str]:
     urls = BaseDownloader._extract_urls(source)
+    non_p3 = [url for url in urls if not urlparse(url).netloc.startswith("p3-")]
+    p3 = [url for url in urls if urlparse(url).netloc.startswith("p3-")]
+    return non_p3 + p3
+
+
+def _first_url(source: Any) -> str | None:
+    urls = _ordered_urls(source)
     return urls[0] if urls else None
+
+
+def _first_gallery_cover_url(aweme: dict[str, Any]) -> str | None:
+    image_sources: list[Any] = []
+    image_post = aweme.get("image_post_info")
+    if isinstance(image_post, dict):
+        for key in ("images", "image_list"):
+            images = image_post.get(key)
+            if isinstance(images, list):
+                image_sources.extend(images)
+
+    for key in ("images", "image_list"):
+        images = aweme.get(key)
+        if isinstance(images, list):
+            image_sources.extend(images)
+
+    for image in image_sources:
+        candidates = [image]
+        if isinstance(image, dict):
+            candidates.extend(
+                image.get(key)
+                for key in (
+                    "display_image",
+                    "origin_image",
+                    "download_url",
+                    "thumbnail",
+                    "cover",
+                )
+            )
+        for candidate in candidates:
+            url = _first_url(candidate)
+            if url:
+                return url
+
+    return None
+
+
+def _cover_url(aweme: dict[str, Any]) -> str | None:
+    video = aweme.get("video") or {}
+    if isinstance(video, dict):
+        for key in ("cover", "origin_cover", "dynamic_cover", "animated_cover"):
+            url = _first_url(video.get(key))
+            if url:
+                return url
+
+    return _first_gallery_cover_url(aweme)
 
 
 def _media_type(aweme: dict[str, Any]) -> str:
@@ -36,11 +90,6 @@ def aweme_to_media_item(
     aweme_id = str(aweme.get("aweme_id") or "")
     media_type = _media_type(aweme)
     video = aweme.get("video") or {}
-    cover_source = video.get("cover") or video.get("origin_cover")
-    if not _first_url(cover_source):
-        images = aweme.get("images") or []
-        if images:
-            cover_source = images[0].get("url_list") or images[0]
 
     return {
         "platform": "douyin",
@@ -59,7 +108,7 @@ def aweme_to_media_item(
         "durationSec": int((video.get("duration") or 0) // 1000)
         if video.get("duration")
         else None,
-        "coverUrl": normalize_cover_url(_first_url(cover_source)),
+        "coverUrl": normalize_cover_url(_cover_url(aweme)),
         "searchKeyword": search_keyword,
     }
 
