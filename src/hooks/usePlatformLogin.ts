@@ -8,12 +8,12 @@ import {
   validatePlatformAuth,
 } from "@/lib/tauri";
 import { formatInvokeError } from "@/lib/utils";
-import type { AppSettings, Platform, PlatformLoginSession } from "@/types";
+import type { AppSettings, AuthPlatform, PlatformLoginSession } from "@/types";
 
 const TERMINAL_STATUSES = new Set(["completed", "failed", "expired"]);
 
 interface UsePlatformLoginOptions {
-  platform: Platform;
+  platform: AuthPlatform;
   cookieField: "douyinCookies" | "bilibiliCookies";
   onSaved?: (settings: AppSettings) => void;
 }

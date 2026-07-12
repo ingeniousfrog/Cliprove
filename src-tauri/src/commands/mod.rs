@@ -28,8 +28,15 @@ fn is_bilibili_url(url: &str) -> bool {
         || lowered.starts_with("av")
 }
 
+fn is_youtube_url(url: &str) -> bool {
+    let lowered = url.to_lowercase();
+    ["youtube.com", "youtu.be", "youtube-nocookie.com"]
+        .iter()
+        .any(|token| lowered.contains(token))
+}
+
 fn ensure_sidecar(state: &AppState, platform: &str) -> AppResult<()> {
-    if platform == "douyin" || platform == "bilibili" {
+    if platform == "douyin" || platform == "bilibili" || platform == "youtube" {
         state.sidecar.start()?;
     }
     Ok(())
@@ -101,7 +108,7 @@ fn enqueue_one(
 #[tauri::command]
 pub fn parse_link(state: State<Arc<AppState>>, url: String) -> Result<ParsedMedia, String> {
     run(|| {
-        if is_douyin_url(&url) || is_bilibili_url(&url) {
+        if is_douyin_url(&url) || is_bilibili_url(&url) || is_youtube_url(&url) {
             let settings = state.db.settings().get_all()?;
             state.sidecar.start()?;
             return state.sidecar.client()?.parse_link(&url, &settings);
@@ -118,7 +125,7 @@ pub fn search_media(
     cursor: Option<String>,
 ) -> Result<SearchPage, String> {
     run(|| {
-        if platform == "douyin" || platform == "bilibili" {
+        if platform == "douyin" || platform == "bilibili" || platform == "youtube" {
             let settings = state.db.settings().get_all()?;
             ensure_sidecar(&state, &platform)?;
             return state
@@ -484,7 +491,7 @@ pub fn validate_platform_auth(
 ) -> Result<AuthStatus, String> {
     run(|| {
         let settings = state.db.settings().get_all()?;
-        if platform == "douyin" || platform == "bilibili" {
+        if platform == "douyin" || platform == "bilibili" || platform == "youtube" {
             ensure_sidecar(&state, &platform)?;
             return state
                 .sidecar

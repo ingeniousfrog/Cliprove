@@ -4,7 +4,7 @@
 
 Cliprove is a local-first desktop application for discovering, downloading, and organizing publicly accessible video content from multiple platforms. All data, credentials, and downloaded media stay on your device—no cloud account or remote backend required.
 
-**Supported platforms:** Douyin, Bilibili
+**Supported platforms:** Bilibili and YouTube in keyword search; Douyin, Bilibili, and YouTube in the link workflow.
 
 ## Highlights
 
@@ -23,7 +23,7 @@ Cliprove is a local-first desktop application for discovering, downloading, and 
 | Storage | SQLite (WAL) |
 | Download engine | Python sidecar (FastAPI), platform adapters |
 
-Douyin downloads are powered by the [douyin-downloader](https://github.com/jiji262/douyin-downloader) engine (git submodule). Bilibili uses `yt-dlp` and `bilibili-api-python`.
+Douyin downloads are powered by the [douyin-downloader](https://github.com/jiji262/douyin-downloader) engine (git submodule). Bilibili uses `yt-dlp` and `bilibili-api-python`; YouTube uses `yt-dlp`.
 
 ## Requirements
 
@@ -33,7 +33,7 @@ Douyin downloads are powered by the [douyin-downloader](https://github.com/jiji2
 | Node.js | 20+ | Frontend toolchain |
 | Rust | stable | Via [rustup](https://rustup.rs) |
 | Python | 3.11+ | Development only; bundled in release builds |
-| FFmpeg | latest | `brew install ffmpeg` — required for Bilibili merge & some streams |
+| FFmpeg | latest | `brew install ffmpeg` — required for Bilibili/YouTube merge & some streams |
 
 ## Quick Start
 

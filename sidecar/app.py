@@ -26,8 +26,9 @@ from platforms.bilibili.service import bilibili_service
 from platforms.cover_url import normalize_cover_url, proxy_referer
 from platforms.douyin.service import douyin_service
 from platforms.errors import map_exception
+from platforms.youtube.service import youtube_service
 
-APP_VERSION = "0.5.0-phase5"
+APP_VERSION = "0.5.2-youtube"
 job_manager = JobManager()
 
 app = FastAPI(title="Cliprove Sidecar", version=APP_VERSION)
@@ -123,6 +124,11 @@ async def parse_media(request: ParseRequest) -> dict[str, Any]:
                 cookies=request.bilibili_cookies,
                 proxy=request.proxy,
             )
+        if _is_youtube(request.url):
+            return await youtube_service.parse(
+                request.url,
+                proxy=request.proxy,
+            )
         raise HTTPException(status_code=400, detail="unsupported_link")
     except HTTPException:
         raise
@@ -135,7 +141,7 @@ async def parse_media(request: ParseRequest) -> dict[str, Any]:
 
 @app.post("/v1/download")
 async def start_download(request: DownloadRequest) -> dict[str, Any]:
-    if request.platform not in {"douyin", "bilibili"}:
+    if request.platform not in {"douyin", "bilibili", "youtube"}:
         raise HTTPException(status_code=400, detail="unsupported platform")
 
     async def run(job: Job) -> dict[str, Any]:
@@ -149,7 +155,7 @@ async def start_download(request: DownloadRequest) -> dict[str, Any]:
                 cookies=request.douyin_cookies,
                 proxy=request.proxy,
             )
-        else:
+        elif request.platform == "bilibili":
             canonical = request.canonical_url or (
                 f"https://www.bilibili.com/video/{request.platform_item_id}"
             )
@@ -158,6 +164,18 @@ async def start_download(request: DownloadRequest) -> dict[str, Any]:
                 output_dir=request.output_dir,
                 asset_ids=request.asset_ids or ["video", "cover", "metadata"],
                 cookies=request.bilibili_cookies,
+                proxy=request.proxy,
+                ffmpeg_path=request.ffmpeg_path,
+                quality_id=request.quality_id,
+            )
+        else:
+            canonical = request.canonical_url or (
+                f"https://www.youtube.com/watch?v={request.platform_item_id}"
+            )
+            result = await youtube_service.download(
+                canonical_url=canonical,
+                output_dir=request.output_dir,
+                asset_ids=request.asset_ids or ["video", "cover", "metadata"],
                 proxy=request.proxy,
                 ffmpeg_path=request.ffmpeg_path,
                 quality_id=request.quality_id,
@@ -197,6 +215,14 @@ async def search_media(request: SearchRequest) -> dict[str, Any]:
                 page_size=request.page_size,
                 filters=request.filters,
                 cookies=request.bilibili_cookies,
+                proxy=request.proxy,
+            )
+        if request.platform == "youtube":
+            return await youtube_service.search(
+                request.keyword,
+                cursor=request.cursor,
+                page_size=request.page_size,
+                filters=request.filters,
                 proxy=request.proxy,
             )
         raise HTTPException(status_code=400, detail="unsupported platform")
@@ -266,6 +292,8 @@ async def validate_auth(request: AuthRequest) -> dict[str, Any]:
             cookies=request.cookies,
             proxy=request.proxy,
         )
+    if request.platform == "youtube":
+        return await youtube_service.validate_auth(proxy=request.proxy)
     return {
         "platform": request.platform,
         "valid": False,
@@ -288,6 +316,14 @@ def _is_bilibili(url: str) -> bool:
         or "b23.tv" in lowered
         or bool(re.fullmatch(r"bv[\w]+", url.strip(), flags=re.IGNORECASE))
         or bool(re.fullmatch(r"av\d+", url.strip(), flags=re.IGNORECASE))
+    )
+
+
+def _is_youtube(url: str) -> bool:
+    lowered = url.lower()
+    return any(
+        token in lowered
+        for token in ("youtube.com", "youtu.be", "youtube-nocookie.com")
     )
 
 

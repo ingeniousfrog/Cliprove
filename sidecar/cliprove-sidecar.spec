@@ -34,6 +34,7 @@ a = Analysis(
         "platforms.douyin.service",
         "platforms.douyin.bootstrap",
         "platforms.bilibili.service",
+        "platforms.youtube.service",
     ],
     hookspath=[],
     hooksconfig={},

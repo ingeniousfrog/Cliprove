@@ -3,11 +3,11 @@ import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { usePlatformLogin } from "@/hooks/usePlatformLogin";
-import type { AppSettings, Platform } from "@/types";
+import type { AppSettings, AuthPlatform } from "@/types";
 
 interface PlatformAuthDialogProps {
   open: boolean;
-  platform: Platform;
+  platform: AuthPlatform;
   title?: string;
   description?: string;
   onClose: () => void;
@@ -15,8 +15,13 @@ interface PlatformAuthDialogProps {
 }
 
 const PLATFORM_COPY: Record<
-  Platform,
-  { title: string; description: string; loginLabel: string; cookieField: "douyinCookies" | "bilibiliCookies" }
+  AuthPlatform,
+  {
+    title: string;
+    description: string;
+    loginLabel: string;
+    cookieField: "douyinCookies" | "bilibiliCookies";
+  }
 > = {
   bilibili: {
     title: "Bilibili 登录",

@@ -24,7 +24,7 @@ export function batchItemsRequireFfmpeg(items: MediaItem[]): boolean {
     requiresFfmpeg(
       item.mediaType === "image_post"
         ? ["images"]
-        : item.platform === "bilibili"
+        : item.platform === "bilibili" || item.platform === "youtube"
           ? ["video", "cover", "metadata", "subtitle"]
           : ["video", "cover", "metadata"],
       item.mediaType,

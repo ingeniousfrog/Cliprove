@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ExternalLink, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CoverImage } from "@/components/media/CoverImage";
-import { bilibiliPlayerUrl, canEmbedPreview } from "@/lib/media";
+import { embeddedPlayerUrl } from "@/lib/media";
 import { resolveMediaPreview } from "@/lib/tauri";
 import { formatDuration, platformLabel } from "@/lib/utils";
 import type { MediaItem } from "@/types";
@@ -38,13 +38,11 @@ export function MediaPreviewDialog({ item, onClose }: MediaPreviewDialogProps) {
 
   if (!item) return null;
 
-  const previewUrl = resolvedPreviewUrl ?? item.previewUrl;
-  const embedUrl = canEmbedPreview(item.platform)
-    ? bilibiliPlayerUrl({
-        platformItemId: item.platformItemId,
-        previewUrl,
-      })
-    : null;
+  const embedUrl = embeddedPlayerUrl({
+    platform: item.platform,
+    platformItemId: item.platformItemId,
+    previewUrl: resolvedPreviewUrl ?? item.previewUrl,
+  });
 
   const openInBrowser = () => {
     window.open(item.canonicalUrl || item.originalUrl, "_blank", "noopener,noreferrer");

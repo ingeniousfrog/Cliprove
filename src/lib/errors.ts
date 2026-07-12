@@ -12,6 +12,7 @@ export function parseErrorCode(error: unknown): ErrorCode | null {
     if (code === "auth_required") return "auth_required";
     if (code === "auth_expired") return "auth_expired";
     if (code === "verification_required") return "verification_required";
+    if (code === "region_restricted") return "region_restricted";
   }
 
   const lowered = message.toLowerCase();
@@ -28,6 +29,15 @@ export function parseErrorCode(error: unknown): ErrorCode | null {
     }
     return "auth_required";
   }
+  if (
+    lowered.includes("not available in your country") ||
+    lowered.includes("not made this video available") ||
+    lowered.includes("geo-restricted") ||
+    lowered.includes("地区不可用") ||
+    lowered.includes("区域不可用")
+  ) {
+    return "region_restricted";
+  }
   return null;
 }
 
@@ -41,4 +51,19 @@ export function isAuthErrorCode(code: ErrorCode | null): boolean {
 
 export function stripErrorPrefix(message: string): string {
   return message.replace(ERROR_PREFIX, "").trim();
+}
+
+export function formatKnownError(error: unknown): string {
+  const rawMessage = formatInvokeError(error);
+  const code = parseErrorCode(rawMessage);
+  const message = stripErrorPrefix(rawMessage);
+
+  if (code === "region_restricted") {
+    return (
+      message ||
+      "该视频对当前网络所在地区不可用，请换一个视频，或切换到允许访问该视频的网络后重试"
+    );
+  }
+
+  return message || "操作失败，请稍后重试";
 }

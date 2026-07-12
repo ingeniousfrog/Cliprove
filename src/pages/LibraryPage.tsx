@@ -44,6 +44,7 @@ type DateRange = "all" | "7d" | "30d" | "90d";
 const PLATFORMS: Array<{ value: Platform | ""; label: string }> = [
   { value: "", label: "全部平台" },
   { value: "bilibili", label: "Bilibili" },
+  { value: "youtube", label: "YouTube" },
 ];
 
 const MEDIA_TYPES: Array<{ value: MediaType | ""; label: string }> = [

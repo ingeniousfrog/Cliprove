@@ -2,7 +2,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Grid3x3, List, Loader2 } from "lucide-react";
-import { adapters } from "@/adapters";
+import { searchAdapters } from "@/adapters";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -14,16 +14,16 @@ import { PlatformAuthDialog } from "@/components/setup/PlatformAuthDialog";
 import { isAuthErrorCode, parseErrorCode } from "@/lib/errors";
 import { batchItemsRequireFfmpeg } from "@/lib/ffmpeg";
 import { enqueueDownloadBatch, ensureFfmpeg, searchMedia } from "@/lib/tauri";
-import { cn, formatDuration, formatInvokeError, platformLabel } from "@/lib/utils";
-import type { MediaItem, Platform, SearchPage } from "@/types";
+import {
+  cn,
+  formatDuration,
+  formatInvokeError,
+  isAuthPlatform,
+  platformLabel,
+} from "@/lib/utils";
+import type { AuthPlatform, MediaItem, Platform, SearchPage } from "@/types";
 
 type ViewMode = "grid" | "table";
-
-const DOUYIN_SORT_OPTIONS = [
-  { value: "general", label: "综合排序" },
-  { value: "likes", label: "最多点赞" },
-  { value: "latest", label: "最新发布" },
-];
 
 const BILIBILI_SORT_OPTIONS = [
   { value: "total", label: "综合排序" },
@@ -32,11 +32,9 @@ const BILIBILI_SORT_OPTIONS = [
   { value: "dm", label: "最多弹幕" },
 ];
 
-const DOUYIN_TIME_OPTIONS = [
-  { value: "all", label: "不限时间" },
-  { value: "day", label: "一天内" },
-  { value: "week", label: "一周内" },
-  { value: "half_year", label: "半年内" },
+const YOUTUBE_SORT_OPTIONS = [
+  { value: "relevance", label: "相关性" },
+  { value: "date", label: "最新上传" },
 ];
 
 export function SearchPage() {
@@ -47,8 +45,7 @@ export function SearchPage() {
   const [results, setResults] = useState<MediaItem[]>([]);
   const [cursor, setCursor] = useState<string | undefined>();
   const [hasMore, setHasMore] = useState(false);
-  const [sort, setSort] = useState("general");
-  const [publishTime, setPublishTime] = useState("all");
+  const [sort, setSort] = useState("total");
   const [isSearching, setIsSearching] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
@@ -57,17 +54,16 @@ export function SearchPage() {
   const [previewItem, setPreviewItem] = useState<MediaItem | null>(null);
   const [ffmpegDialogOpen, setFfmpegDialogOpen] = useState(false);
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
-  const [authPlatform, setAuthPlatform] = useState<Platform>("bilibili");
+  const [authPlatform, setAuthPlatform] = useState<AuthPlatform>("bilibili");
   const [authBannerVisible, setAuthBannerVisible] = useState(false);
   const pendingBatchRef = useRef<MediaItem[]>([]);
   const queryClient = useQueryClient();
   const parentRef = useRef<HTMLDivElement>(null);
 
   const filters = useMemo(() => {
-    if (platform === "douyin") return { sort, publish_time: publishTime };
-    if (platform === "bilibili") return { sort };
+    if (platform === "bilibili" || platform === "youtube") return { sort };
     return undefined;
-  }, [platform, sort, publishTime]);
+  }, [platform, sort]);
 
   const runSearch = useCallback(
     async (nextCursor?: string) => {
@@ -97,7 +93,7 @@ export function SearchPage() {
       setCursor(undefined);
       setHasMore(false);
       setSearchError(formatInvokeError(error));
-      if (isAuthErrorCode(parseErrorCode(error))) {
+      if (isAuthErrorCode(parseErrorCode(error)) && isAuthPlatform(platform)) {
         setAuthPlatform(platform);
         setAuthBannerVisible(true);
       } else {
@@ -134,7 +130,7 @@ export function SearchPage() {
       const itemAssets =
         item.mediaType === "image_post"
           ? ["images", "cover", "metadata"]
-          : item.platform === "bilibili"
+          : item.platform === "bilibili" || item.platform === "youtube"
             ? ["video", "cover", "metadata", "subtitle"]
             : ["video", "cover", "metadata"];
       itemAssets.forEach((asset) => assets.add(asset));
@@ -212,15 +208,15 @@ export function SearchPage() {
     overscan: 6,
   });
 
-  const showDouyinFilters = platform === "douyin";
   const showBilibiliFilters = platform === "bilibili";
+  const showYouTubeFilters = platform === "youtube";
 
   return (
     <div className="mx-auto flex h-full max-w-6xl flex-col gap-4 p-6">
       <div>
         <h1 className="text-xl font-semibold">关键词搜索</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Bilibili 与抖音已接入真实搜索；抖音搜索需要登录 Cookie，且可能受平台验证影响。
+          Bilibili 与 YouTube 已接入真实搜索；YouTube 基于 yt-dlp，结果和分页可能受网络影响。
         </p>
       </div>
 
@@ -234,6 +230,7 @@ export function SearchPage() {
           <Button
             size="sm"
             onClick={() => {
+              if (!isAuthPlatform(platform)) return;
               setAuthPlatform(platform);
               setAuthDialogOpen(true);
             }}
@@ -261,10 +258,10 @@ export function SearchPage() {
                   setHasSearched(false);
                   setSearchError(null);
                   setAuthBannerVisible(false);
-                  setSort(next === "bilibili" ? "total" : "general");
+                  setSort(next === "bilibili" ? "total" : "relevance");
                 }}
               >
-                {adapters.map((item) => (
+                {searchAdapters.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.name}
                   </option>
@@ -309,29 +306,23 @@ export function SearchPage() {
             </div>
           </div>
 
-          {showDouyinFilters ? (
-            <div className="flex flex-wrap gap-3 border-t border-slate-100 pt-3">
-              <FilterSelect
-                label="排序"
-                value={sort}
-                options={DOUYIN_SORT_OPTIONS}
-                onChange={setSort}
-              />
-              <FilterSelect
-                label="发布时间"
-                value={publishTime}
-                options={DOUYIN_TIME_OPTIONS}
-                onChange={setPublishTime}
-              />
-            </div>
-          ) : null}
-
           {showBilibiliFilters ? (
             <div className="flex flex-wrap gap-3 border-t border-slate-100 pt-3">
               <FilterSelect
                 label="排序"
                 value={sort}
                 options={BILIBILI_SORT_OPTIONS}
+                onChange={setSort}
+              />
+            </div>
+          ) : null}
+
+          {showYouTubeFilters ? (
+            <div className="flex flex-wrap gap-3 border-t border-slate-100 pt-3">
+              <FilterSelect
+                label="排序"
+                value={sort}
+                options={YOUTUBE_SORT_OPTIONS}
                 onChange={setSort}
               />
             </div>

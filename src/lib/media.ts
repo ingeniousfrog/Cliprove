@@ -43,6 +43,17 @@ export function bilibiliPlayerUrl(
   return `https://player.bilibili.com/player.html?${params.toString()}`;
 }
 
-export function canEmbedPreview(platform: Platform | string): boolean {
-  return platform === "bilibili";
+export function youtubePlayerUrl(
+  item: Pick<MediaItem, "platformItemId" | "previewUrl">
+): string {
+  if (item.previewUrl) return item.previewUrl;
+  return `https://www.youtube.com/embed/${item.platformItemId}`;
+}
+
+export function embeddedPlayerUrl(
+  item: Pick<MediaItem, "platform" | "platformItemId" | "previewUrl">
+): string | null {
+  if (item.platform === "bilibili") return bilibiliPlayerUrl(item);
+  if (item.platform === "youtube") return youtubePlayerUrl(item);
+  return null;
 }

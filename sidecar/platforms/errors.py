@@ -24,11 +24,32 @@ def verification_required(message: str) -> RuntimeError:
     return cliprove_error("VERIFICATION_REQUIRED", message)
 
 
+def region_restricted(message: str) -> RuntimeError:
+    return cliprove_error("REGION_RESTRICTED", message)
+
+
 def map_exception(exc: Exception) -> RuntimeError:
     message = str(exc).strip() or exc.__class__.__name__
     lowered = message.lower()
     if "ffmpeg" in lowered:
         return ffmpeg_unavailable(message)
+    if any(
+        token in lowered
+        for token in (
+            "not made this video available in your country",
+            "not available in your country",
+            "not available in your region",
+            "this video is available in",
+            "geo-restricted",
+            "geo restricted",
+            "region",
+            "地区",
+            "区域",
+        )
+    ):
+        return region_restricted(
+            "该视频对当前网络所在地区不可用，请换一个视频，或切换到允许访问该视频的网络后重试"
+        )
     if any(
         token in lowered
         for token in (

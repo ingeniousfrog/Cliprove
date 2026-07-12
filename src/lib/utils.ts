@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import type { AuthPlatform } from "@/types";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -40,9 +41,15 @@ export function platformLabel(platform: string): string {
       return "抖音";
     case "bilibili":
       return "Bilibili";
+    case "youtube":
+      return "YouTube";
     default:
       return platform;
   }
+}
+
+export function isAuthPlatform(platform: string): platform is AuthPlatform {
+  return platform === "douyin" || platform === "bilibili";
 }
 
 export function mediaTypeLabel(mediaType: string): string {

@@ -10,6 +10,7 @@ use crate::errors::{AppError, AppResult};
 use crate::models::SidecarHealth;
 
 const DEFAULT_PORT: u16 = 18765;
+const EXPECTED_SIDECAR_VERSION: &str = "0.5.2-youtube";
 const SIDECAR_BINARY_NAME: &str = "cliprove-sidecar";
 
 pub struct SidecarManager {
@@ -35,7 +36,7 @@ impl SidecarManager {
 
     pub fn start(&self) -> AppResult<SidecarHealth> {
         if let Ok(health) = self.health() {
-            if health.status == "ok" {
+            if is_current_sidecar(&health) {
                 return Ok(health);
             }
         }
@@ -79,7 +80,7 @@ impl SidecarManager {
         for _ in 0..30 {
             std::thread::sleep(std::time::Duration::from_millis(200));
             if let Ok(health) = self.health() {
-                if health.status == "ok" {
+                if is_current_sidecar(&health) {
                     return Ok(health);
                 }
             }
@@ -115,6 +116,10 @@ impl Drop for SidecarManager {
     fn drop(&mut self) {
         let _ = self.stop();
     }
+}
+
+fn is_current_sidecar(health: &SidecarHealth) -> bool {
+    health.status == "ok" && health.version.as_deref() == Some(EXPECTED_SIDECAR_VERSION)
 }
 
 fn augmented_path() -> String {
@@ -233,5 +238,21 @@ mod tests {
     fn dev_entrypoint_exists_in_repo() {
         let path = dev_sidecar_entrypoint();
         assert!(path.is_ok(), "expected sidecar/app.py in development tree");
+    }
+
+    #[test]
+    fn current_sidecar_requires_expected_version() {
+        assert!(is_current_sidecar(&SidecarHealth {
+            status: "ok".to_string(),
+            version: Some(EXPECTED_SIDECAR_VERSION.to_string()),
+        }));
+        assert!(!is_current_sidecar(&SidecarHealth {
+            status: "ok".to_string(),
+            version: Some("0.5.0-phase5".to_string()),
+        }));
+        assert!(!is_current_sidecar(&SidecarHealth {
+            status: "failed".to_string(),
+            version: Some(EXPECTED_SIDECAR_VERSION.to_string()),
+        }));
     }
 }

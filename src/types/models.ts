@@ -1,4 +1,5 @@
-export type Platform = "douyin" | "bilibili";
+export type Platform = "douyin" | "bilibili" | "youtube";
+export type AuthPlatform = "douyin" | "bilibili";
 
 export type MediaType = "video" | "image_post" | "audio" | "multipart";
 

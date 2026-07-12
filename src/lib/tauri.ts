@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   AppPaths,
   AppSettings,
+  AuthPlatform,
   AuthStatus,
   Collection,
   DownloadOptions,
@@ -172,7 +173,7 @@ export async function validatePlatformAuth(
 }
 
 export async function startPlatformLogin(
-  platform: Platform
+  platform: AuthPlatform
 ): Promise<PlatformLoginSession> {
   return invoke<PlatformLoginSession>("start_platform_login", { platform });
 }

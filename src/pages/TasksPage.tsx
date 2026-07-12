@@ -13,17 +13,18 @@ import { listTasks } from "@/lib/tauri";
 import {
   formatDate,
   formatSpeed,
+  isAuthPlatform,
   platformLabel,
   statusLabel,
 } from "@/lib/utils";
-import type { DownloadProgress, Platform } from "@/types";
+import type { AuthPlatform, DownloadProgress, Platform } from "@/types";
 
 export function TasksPage() {
   const queryClient = useQueryClient();
   const { pendingAction, runAction } = useTaskActions();
   const [ffmpegDialogOpen, setFfmpegDialogOpen] = useState(false);
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
-  const [authPlatform, setAuthPlatform] = useState<Platform>("bilibili");
+  const [authPlatform, setAuthPlatform] = useState<AuthPlatform>("bilibili");
 
   const { data: tasks = [], isLoading } = useQuery({
     queryKey: ["tasks"],
@@ -49,6 +50,7 @@ export function TasksPage() {
   const interruptedTasks = tasks.filter((task) => task.status === "interrupted");
 
   const openAuthDialog = (platform: Platform) => {
+    if (!isAuthPlatform(platform)) return;
     setAuthPlatform(platform);
     setAuthDialogOpen(true);
   };
@@ -162,7 +164,8 @@ export function TasksPage() {
                               安装 FFmpeg
                             </Button>
                           ) : null}
-                          {isAuthErrorCode(task.error.code) ? (
+                          {isAuthErrorCode(task.error.code) &&
+                          isAuthPlatform(task.platform) ? (
                             <Button
                               size="sm"
                               variant="secondary"

@@ -13,7 +13,7 @@ import { FfmpegRequiredDialog } from "@/components/setup/FfmpegRequiredDialog";
 import { PlatformAuthDialog } from "@/components/setup/PlatformAuthDialog";
 import { detectAdapter } from "@/adapters";
 import { useTaskActions } from "@/hooks/useTaskActions";
-import { isAuthErrorCode, parseErrorCode } from "@/lib/errors";
+import { formatKnownError, isAuthErrorCode, parseErrorCode } from "@/lib/errors";
 import { downloadOptionsRequireFfmpeg } from "@/lib/ffmpeg";
 import { enqueueDownload, ensureFfmpeg, getSettings, listTasks, parseLink } from "@/lib/tauri";
 import { useAppStore } from "@/stores/app";
@@ -21,10 +21,16 @@ import { cn } from "@/lib/utils";
 import {
   formatDate,
   formatDuration,
+  isAuthPlatform,
   platformLabel,
   statusLabel,
 } from "@/lib/utils";
-import type { DownloadOptions, DownloadProgress, MediaItem, Platform } from "@/types";
+import type {
+  AuthPlatform,
+  DownloadOptions,
+  DownloadProgress,
+  MediaItem,
+} from "@/types";
 
 function sameParsedUrl(input: string, candidate?: string): boolean {
   if (!candidate) return false;
@@ -41,7 +47,7 @@ export function HomePage() {
   const [selectedQuality, setSelectedQuality] = useState<string>("best");
   const [ffmpegDialogOpen, setFfmpegDialogOpen] = useState(false);
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
-  const [authPlatform, setAuthPlatform] = useState<Platform>("bilibili");
+  const [authPlatform, setAuthPlatform] = useState<AuthPlatform>("bilibili");
   const queryClient = useQueryClient();
   const { parsedMedia, setParsedMedia } = useAppStore();
   const { pendingAction, runAction } = useTaskActions();
@@ -50,6 +56,12 @@ export function HomePage() {
   const retryDownloadRef = useRef(false);
 
   const detected = url.trim() ? detectAdapter(url.trim()) : undefined;
+
+  const openDetectedAuthDialog = () => {
+    if (!detected || !isAuthPlatform(detected.id)) return;
+    setAuthPlatform(detected.id);
+    setAuthDialogOpen(true);
+  };
 
   const clearParsedMedia = () => {
     setParsedMedia(null);
@@ -61,7 +73,7 @@ export function HomePage() {
   const parseMutation = useMutation({
     mutationFn: () => {
       if (!detected) {
-        throw new Error("当前版本支持 Bilibili 或抖音分享链接");
+        throw new Error("当前版本支持 Bilibili、YouTube 或抖音分享链接");
       }
       return parseLink(url.trim());
     },
@@ -74,9 +86,8 @@ export function HomePage() {
       setSelectedQuality(data.qualities?.[0]?.id ?? "best");
     },
     onError: (error) => {
-      if (isAuthErrorCode(parseErrorCode(error))) {
-        setAuthPlatform(detected?.id ?? "bilibili");
-        setAuthDialogOpen(true);
+      if (isAuthErrorCode(parseErrorCode(error)) && detected) {
+        openDetectedAuthDialog();
       }
     },
   });
@@ -210,6 +221,14 @@ export function HomePage() {
     );
   };
 
+  const parseErrorCodeValue = parseMutation.isError
+    ? parseErrorCode(parseMutation.error)
+    : null;
+  const parseErrorMessage = parseMutation.isError
+    ? formatKnownError(parseMutation.error)
+    : null;
+  const isRegionRestricted = parseErrorCodeValue === "region_restricted";
+
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-4 p-6">
       <div>
@@ -234,7 +253,7 @@ export function HomePage() {
                   已识别平台：<Badge>{detected.name}</Badge>
                 </span>
               ) : (
-                "等待输入 Bilibili 或抖音链接"
+                "等待输入 Bilibili、YouTube 或抖音链接"
               )}
             </div>
             <div className="flex gap-2">
@@ -256,17 +275,33 @@ export function HomePage() {
             </div>
           </div>
           {parseMutation.isError ? (
-            <div className="space-y-2">
-              <p className="text-sm text-red-600">
-                {(parseMutation.error as Error).message}
+            <div
+              className={cn(
+                "space-y-2 rounded-md border px-3 py-2",
+                isRegionRestricted
+                  ? "border-amber-200 bg-amber-50"
+                  : "border-red-200 bg-red-50"
+              )}
+            >
+              <p
+                className={cn(
+                  "text-sm",
+                  isRegionRestricted ? "text-amber-800" : "text-red-700"
+                )}
+              >
+                {parseErrorMessage}
               </p>
-              {isAuthErrorCode(parseErrorCode(parseMutation.error)) ? (
+              {isRegionRestricted ? (
+                <p className="text-xs text-amber-700">
+                  这不是解析器不支持 YouTube，而是该视频发布者限制了当前网络所在地区。
+                </p>
+              ) : null}
+              {isAuthErrorCode(parseErrorCodeValue) &&
+              detected &&
+              isAuthPlatform(detected.id) ? (
                 <Button
                   size="sm"
-                  onClick={() => {
-                    setAuthPlatform(detected?.id ?? "bilibili");
-                    setAuthDialogOpen(true);
-                  }}
+                  onClick={openDetectedAuthDialog}
                 >
                   去登录
                 </Button>

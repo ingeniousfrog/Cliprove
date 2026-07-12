@@ -2,10 +2,10 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { usePlatformLogin } from "@/hooks/usePlatformLogin";
-import type { AppSettings, Platform } from "@/types";
+import type { AppSettings, AuthPlatform } from "@/types";
 
 interface PlatformAuthCardProps {
-  platform: Platform;
+  platform: AuthPlatform;
   title: string;
   description: string;
   loginLabel: string;

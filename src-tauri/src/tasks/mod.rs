@@ -29,7 +29,7 @@ pub async fn run_task(
         .await
         .map_err(|_| AppError::Message("下载并发槽不可用".to_string()))?;
 
-    if item.platform == "douyin" || item.platform == "bilibili" {
+    if item.platform == "douyin" || item.platform == "bilibili" || item.platform == "youtube" {
         return run_sidecar_task(
             app,
             Arc::clone(&state.db),
@@ -362,6 +362,14 @@ fn structured_error_from_sidecar_message(message: &str) -> StructuredError {
             code: "verification_required".to_string(),
             message: rest.trim().to_string(),
             suggestion: Some("请在浏览器完成验证后重试".to_string()),
+            technical_detail: Some(message.to_string()),
+        };
+    }
+    if let Some(rest) = message.strip_prefix("CLIPROVE_REGION_RESTRICTED:") {
+        return StructuredError {
+            code: "region_restricted".to_string(),
+            message: rest.trim().to_string(),
+            suggestion: Some("请换一个视频，或切换到允许访问该视频的网络后重试".to_string()),
             technical_detail: Some(message.to_string()),
         };
     }
