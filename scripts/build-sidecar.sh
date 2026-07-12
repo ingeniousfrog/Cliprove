@@ -24,7 +24,14 @@ rm -rf build dist
 TARGET="$(rustc -vV | awk '/host: / {print $2}')"
 DEST="$ROOT/src-tauri/binaries/cliprove-sidecar-${TARGET}"
 mkdir -p "$ROOT/src-tauri/binaries"
-cp "dist/cliprove-sidecar" "$DEST"
-chmod +x "$DEST"
+
+SIDECAR_BIN="dist/cliprove-sidecar"
+if [[ -f "${SIDECAR_BIN}.exe" ]]; then
+  SIDECAR_BIN="${SIDECAR_BIN}.exe"
+  DEST="${DEST}.exe"
+fi
+
+cp "${SIDECAR_BIN}" "$DEST"
+chmod +x "$DEST" 2>/dev/null || true
 
 echo "Sidecar binary ready: $DEST"

@@ -19,14 +19,20 @@ chmod +x scripts/build.sh scripts/build-sidecar.sh
 
 GitHub Actions（推荐发布）：
 
+**推送到 `main` 只会跑 CI 测试，不会发版。** 发版需要打 tag：
+
 1. 将 `src-tauri/tauri.conf.json` 中的 `version` 更新为目标版本
-2. 提交并打 tag，例如 `v0.1.0`
+2. 提交并打 tag：`git tag v0.1.0`
 3. 推送 tag：`git push origin v0.1.0`
-4. [Release 工作流](https://github.com/ingeniousfrog/Cliprove/actions/workflows/release.yml) 会自动构建 macOS `.dmg` 并创建 GitHub Release
+4. [Release 工作流](https://github.com/ingeniousfrog/Cliprove/actions/workflows/release.yml) 会并行构建并发布：
+   - **macOS**：`.dmg`（Apple Silicon）
+   - **Windows**：`.exe` 安装包（NSIS）+ `.msi`
 
-也可在 Actions 页手动触发 **Release** 工作流，仅上传构建产物（不创建 Release）。
+也可在 Actions 页手动运行 **Release**：
+- 留空 `release_tag`：只构建产物（Artifacts）
+- 填写 `release_tag`（如 `v0.1.0`）：构建并创建 GitHub Release
 
-CI 工作流会在 push / PR 时运行前端构建、Rust 测试与 Sidecar 测试。
+CI 工作流在 push / PR 时运行测试，不负责发版。
 
 产物目录：
 

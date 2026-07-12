@@ -49,12 +49,25 @@ chmod +x scripts/dev.sh
 
 ## 打包发布
 
+本地 macOS 打包：
+
 ```bash
 chmod +x scripts/build.sh
 ./scripts/build.sh
 ```
 
-安装包输出至 `src-tauri/target/release/bundle/dmg/`。Sidecar 重建与引擎更新见 [docs/packaging.md](./docs/packaging.md)。
+**GitHub 自动发版**（推荐）：
+
+```bash
+# 1. 更新 src-tauri/tauri.conf.json 的 version
+# 2. 提交后打 tag 并推送（推 main 不会发版，只会跑 CI）
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Release 工作流会自动构建 **macOS `.dmg`** 与 **Windows `.exe` / `.msi`**，并发布到 [GitHub Releases](https://github.com/ingeniousfrog/Cliprove/releases)。
+
+详见 [docs/packaging.md](./docs/packaging.md)。
 
 ## 目录结构
 
