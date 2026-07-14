@@ -28,7 +28,7 @@ from platforms.douyin.service import douyin_service
 from platforms.errors import map_exception
 from platforms.youtube.service import youtube_service
 
-APP_VERSION = "0.5.2-youtube"
+APP_VERSION = "0.5.3"
 job_manager = JobManager()
 
 app = FastAPI(title="Cliprove Sidecar", version=APP_VERSION)

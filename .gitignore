@@ -34,6 +34,7 @@ sidecar/dist
 # Python
 sidecar/__pycache__
 sidecar/.venv
+sidecar/.cookies.json
 *.pyc
 .venv
 
@@ -44,3 +45,7 @@ sidecar/.venv
 # Planning (local only)
 GOAL.md
 IMPLEMENTATION_PLAN.md
+
+# Drafts / marketing (local only, not for GitHub)
+article.md
+illustrations/

@@ -35,6 +35,14 @@ git submodule update --init --recursive
 - 确认 `engines/douyin-downloader` submodule 已初始化
 - 查看 sidecar  stderr 或应用日志
 
+### 症状：Bilibili 登录失败（SSL / `CERTIFICATE_VERIFY_FAILED`）
+
+安装包内 Sidecar 访问 `api.bilibili.com` 时若出现 `SSLCertVerificationError` / `unable to get local issuer certificate`：
+
+- 多为打包后的 OpenSSL 未挂上 CA 证书包（`certifi`）导致，请升级至 **v0.1.5+**
+- 开发环境一般不受影响（使用本机 Python / Homebrew CA）
+- 若自建包仍报错：确认 `sidecar/hooks/pyi_rth_ssl_certifi.py` 已编入，并重新执行 `./scripts/build-sidecar.sh`
+
 ### 症状：Bilibili 下载失败 / 无法合并
 
 - 设置页验证 FFmpeg 路径
