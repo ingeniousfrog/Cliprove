@@ -23,7 +23,7 @@ Pre-built installers are published on **[GitHub Releases](https://github.com/ing
 | macOS | `.dmg` | macOS 13 (Ventura) or later, **Apple Silicon (arm64)** |
 | Windows | `.exe` (NSIS) or `.msi` | Windows 10/11, **x64** |
 
-> **Latest release:** [v0.1.5](https://github.com/ingeniousfrog/Cliprove/releases/tag/v0.1.5)
+> **Latest release:** [v0.1.6](https://github.com/ingeniousfrog/Cliprove/releases/tag/v0.1.6)
 
 ## Installation Notes
 

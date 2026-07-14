@@ -39,9 +39,14 @@ git submodule update --init --recursive
 
 安装包内 Sidecar 访问 `api.bilibili.com` 时若出现 `SSLCertVerificationError` / `unable to get local issuer certificate`：
 
-- 多为打包后的 OpenSSL 未挂上 CA 证书包（`certifi`）导致，请升级至 **v0.1.5+**
+- 多为打包后的 OpenSSL 未挂上 CA 证书包（`certifi`）导致，请升级至 **v0.1.6+**
 - 开发环境一般不受影响（使用本机 Python / Homebrew CA）
 - 若自建包仍报错：确认 `sidecar/hooks/pyi_rth_ssl_certifi.py` 已编入，并重新执行 `./scripts/build-sidecar.sh`
+- 升级后仍异常：可能是旧版 Sidecar 进程仍占用 `18765` 端口。退出 App 后执行：
+  ```bash
+  lsof -tiTCP:18765 -sTCP:LISTEN | xargs kill
+  ```
+  再重新打开 Cliprove
 
 ### 症状：Bilibili 下载失败 / 无法合并
 

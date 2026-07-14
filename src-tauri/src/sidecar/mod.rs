@@ -10,7 +10,7 @@ use crate::errors::{AppError, AppResult};
 use crate::models::SidecarHealth;
 
 const DEFAULT_PORT: u16 = 18765;
-const EXPECTED_SIDECAR_VERSION: &str = "0.5.2-youtube";
+const EXPECTED_SIDECAR_VERSION: &str = "0.5.3";
 const SIDECAR_BINARY_NAME: &str = "cliprove-sidecar";
 // PyInstaller onefile sidecar can take 30–60s to unpack on cold start.
 const STARTUP_ATTEMPTS: usize = 240;
@@ -42,9 +42,15 @@ impl SidecarManager {
             if is_current_sidecar(&health) {
                 return Ok(health);
             }
+            // Stale/orphan listener on this port (e.g. previous app install).
+            // stop() only tracks children we spawned in this process, so also
+            // free the port before launching the bundled sidecar.
+            self.stop()?;
+            kill_listeners_on_port(self.port);
+            std::thread::sleep(std::time::Duration::from_millis(300));
+        } else {
+            self.stop()?;
         }
-
-        self.stop()?;
 
         let (program, args, working_dir) = resolve_sidecar_launcher(self.port)?;
         let launcher_label = format_launcher(&program, &args);
@@ -141,6 +147,43 @@ impl Drop for SidecarManager {
 
 fn is_current_sidecar(health: &SidecarHealth) -> bool {
     health.status == "ok" && health.version.as_deref() == Some(EXPECTED_SIDECAR_VERSION)
+}
+
+fn kill_listeners_on_port(port: u16) {
+    #[cfg(unix)]
+    {
+        let _ = Command::new("lsof")
+            .args(["-t", &format!("-iTCP:{port}"), "-sTCP:LISTEN"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .output()
+            .ok()
+            .and_then(|output| {
+                if !output.status.success() {
+                    return None;
+                }
+                let pids = String::from_utf8_lossy(&output.stdout);
+                for pid in pids.split_whitespace() {
+                    let _ = Command::new("kill").args(["-TERM", pid]).status();
+                }
+                Some(())
+            });
+    }
+
+    #[cfg(windows)]
+    {
+        let _ = Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-Command",
+                &format!(
+                    "Get-NetTCPConnection -LocalPort {port} -State Listen -ErrorAction SilentlyContinue | ForEach-Object {{ Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }}"
+                ),
+            ])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
 }
 
 fn format_launcher(program: &std::path::Path, args: &[String]) -> String {
